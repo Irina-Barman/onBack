@@ -12,12 +12,12 @@ from ..utils.mailer import send_email
 class AuthService:
     # ----------------- REGISTRATION -----------------
     @staticmethod
-    def register_user(email: str, password: str, nickname: str,
+    def register_user(email: str, password: str,
                       partner_uid: Optional[str] = None) -> User:
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
 
-        user = User(email=email, nickname=nickname, partner_uid=partner_uid)
+        user = User(email=email, partner_uid=partner_uid)
         user.set_password(password)
         db.session.add(user)
         db.session.flush()           # получаем user.id до коммита

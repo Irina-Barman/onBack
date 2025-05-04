@@ -55,8 +55,7 @@ class Register(Resource):
             user = AuthService.register_user(
                 email=data["email"],
                 password=data["password"],
-                nickname=data["nickname"],
-                partner_uid=partner_uid,
+                partner_uid=partner_uid
             )
             return {
                 "message": "Registration successful. Please confirm your e-mail.",
