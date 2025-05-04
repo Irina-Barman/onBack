@@ -1,0 +1,68 @@
+from decimal import Decimal, ROUND_DOWN
+from ..extensions import db
+from ..models import (MiningEquipment, EquipmentInvestment,
+                      MiningProfitBatch, Transaction, TxType, TxStatus)
+from ..models.ledger_entry import LedgerEntry, LedgerType
+from ..utils.ledger_decorator import ledger
+from ..services import wallet_service as wsvc
+
+
+def record_mined(equipment_id: int,
+                 mined_usdt: Decimal,
+                 period_start, period_end):
+    """
+    Админ фиксирует добычу за период – создаётся Batch; деньги
+    пока на счёте компании, распределим cron-ом.
+    """
+    eq = MiningEquipment.query.get(equipment_id)
+    opex = (mined_usdt * (eq.opex_pct / 100)).quantize(Decimal("0.01"))
+    dist = mined_usdt - opex
+
+    batch = MiningProfitBatch(
+        equipment_id=equipment_id,
+        mined_usdt=mined_usdt,
+        opex_usdt=opex,
+        distributable=dist,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    db.session.add(batch)
+    db.session.commit()
+    return batch
+
+
+def distribute_batch(batch_id: int):
+    batch = MiningProfitBatch.query.get(batch_id)
+    eq_id = batch.equipment_id
+    dist  = batch.distributable
+
+    # суммарная net-инвестиция
+    total_net = db.session.query(
+        db.func.coalesce(db.func.sum(EquipmentInvestment.net_amount), 0)
+    ).filter_by(equipment_id=eq_id).scalar()
+
+    if total_net == 0:
+        return
+
+    investments = EquipmentInvestment.query.filter_by(equipment_id=eq_id).all()
+    for inv in investments:
+        share = (inv.net_amount / total_net)
+        payout = (dist * share).quantize(Decimal("0.01"), ROUND_DOWN)
+        if payout == 0:
+            continue
+
+        tx = Transaction(
+            user_id=inv.user_id, type=TxType.profit,
+            status=TxStatus.confirmed, network="profit", amount=payout)
+        db.session.add(tx); db.session.flush()
+
+        db.session.add(LedgerEntry(
+            user_id=inv.user_id, origin_table="transactions", origin_id=tx.id,
+            type=LedgerType.profit, direction="in",
+            network="profit", amount=payout
+        ))
+
+        # кладём на основной баланс (ERC) как депозит
+        wsvc.credit_to_balance(inv.user_id, "erc", payout)
+
+    db.session.commit()
