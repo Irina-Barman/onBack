@@ -23,25 +23,24 @@ class TokenNetwork(ABC):
 
     @staticmethod
     @abstractmethod
-    def balance(addr: str) -> Decimal:
-        ...
+    def balance(addr: str) -> Decimal: ...
 
     @staticmethod
     @abstractmethod
-    def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
-        ...
+    def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal: ...
 
     @staticmethod
     @abstractmethod
-    def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
-        ...
+    def transfer(pk: str, to_addr: str, amount: Decimal) -> str: ...
 
 
 # ------------------------------------------------------------------ ERC-20
 class ERC20(TokenNetwork):
     infura_key = os.getenv("INFURA_API_KEY")
     w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_key}"))
-    contract_addr = Web3.to_checksum_address("0xdAC17F958D2ee523a2206206994597C13D831ec7")
+    contract_addr = Web3.to_checksum_address(
+        "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    )
 
     @staticmethod
     def _contract(abi):
@@ -56,42 +55,81 @@ class ERC20(TokenNetwork):
     # ---------- balance ----------
     @staticmethod
     def balance(addr: str) -> Decimal:
-        abi = [{"constant": True,"inputs":[{"name":"_owner","type":"address"}],
-                "name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
-        bal = ERC20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
-        return Decimal(bal) / (10 ** ERC20.decimals)
+        abi = [
+            {
+                "constant": True,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "type": "function",
+            }
+        ]
+        bal = (
+            ERC20._contract(abi)
+            .functions.balanceOf(Web3.to_checksum_address(addr))
+            .call()
+        )
+        return Decimal(bal) / (10**ERC20.decimals)
 
     # ---------- gas ----------
     @staticmethod
     def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
         from_addr = ERC20.w3.eth.account.privateKeyToAccount(pk).address
-        abi = [{"constant":False,"inputs":[{"name":"_to","type":"address"},
-                                           {"name":"_value","type":"uint256"}],
-                "name":"transfer","outputs":[{"name":"","type":"bool"}],"type":"function"}]
-        tx = ERC20._contract(abi).functions.transfer(
+        abi = [
+            {
+                "constant": False,
+                "inputs": [
+                    {"name": "_to", "type": "address"},
+                    {"name": "_value", "type": "uint256"},
+                ],
+                "name": "transfer",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function",
+            }
+        ]
+        tx = (
+            ERC20._contract(abi)
+            .functions.transfer(
                 Web3.to_checksum_address(to_addr),
-                int(amount * (10**ERC20.decimals))
-            ).build_transaction({"from": from_addr})
+                int(amount * (10**ERC20.decimals)),
+            )
+            .build_transaction({"from": from_addr})
+        )
         gas = ERC20.w3.eth.estimate_gas(tx)
         gas_price = ERC20.w3.eth.gas_price
-        return Decimal(gas * gas_price) / (10 ** 18)    # ETH → ETH
+        return Decimal(gas * gas_price) / (10**18)  # ETH → ETH
 
     # ---------- transfer ----------
     @staticmethod
     def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
         acct = ERC20.w3.eth.account.privateKeyToAccount(pk)
         nonce = ERC20.w3.eth.get_transaction_count(acct.address)
-        abi = [{"constant":False,"inputs":[{"name":"_to","type":"address"},
-                                           {"name":"_value","type":"uint256"}],
-                "name":"transfer","outputs":[{"name":"","type":"bool"}],"type":"function"}]
-        tx = ERC20._contract(abi).functions.transfer(
+        abi = [
+            {
+                "constant": False,
+                "inputs": [
+                    {"name": "_to", "type": "address"},
+                    {"name": "_value", "type": "uint256"},
+                ],
+                "name": "transfer",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function",
+            }
+        ]
+        tx = (
+            ERC20._contract(abi)
+            .functions.transfer(
                 Web3.to_checksum_address(to_addr),
-                int(amount * (10 ** ERC20.decimals))
-            ).build_transaction({
-                "from": acct.address,
-                "nonce": nonce,
-                "gasPrice": ERC20.w3.eth.gas_price
-            })
+                int(amount * (10**ERC20.decimals)),
+            )
+            .build_transaction(
+                {
+                    "from": acct.address,
+                    "nonce": nonce,
+                    "gasPrice": ERC20.w3.eth.gas_price,
+                }
+            )
+        )
         signed = acct.sign_transaction(tx)
         return ERC20.w3.eth.send_raw_transaction(signed.rawTransaction).hex()
 
@@ -99,7 +137,9 @@ class ERC20(TokenNetwork):
 # ------------------------------------------------------------------ BEP-20
 class BEP20(TokenNetwork):
     w3 = Web3(Web3.HTTPProvider("https://bsc-dataseed.binance.org"))
-    contract_addr = Web3.to_checksum_address("0x55d398326f99059fF775485246999027B3197955")
+    contract_addr = Web3.to_checksum_address(
+        "0x55d398326f99059fF775485246999027B3197955"
+    )
 
     @staticmethod
     def _contract(abi):
@@ -112,40 +152,79 @@ class BEP20(TokenNetwork):
 
     @staticmethod
     def balance(addr: str) -> Decimal:
-        abi = [{"constant": True,"inputs":[{"name":"_owner","type":"address"}],
-                "name":"balanceOf","outputs":[{"name":"balance","type":"uint256"}],"type":"function"}]
-        bal = BEP20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
-        return Decimal(bal) / (10 ** BEP20.decimals)
+        abi = [
+            {
+                "constant": True,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "type": "function",
+            }
+        ]
+        bal = (
+            BEP20._contract(abi)
+            .functions.balanceOf(Web3.to_checksum_address(addr))
+            .call()
+        )
+        return Decimal(bal) / (10**BEP20.decimals)
 
     @staticmethod
     def estimate_fee(pk, amount, to_addr):
         from_addr = BEP20.w3.eth.account.privateKeyToAccount(pk).address
-        abi = [{"constant":False,"inputs":[{"name":"_to","type":"address"},
-                                           {"name":"_value","type":"uint256"}],
-                "name":"transfer","outputs":[{"name":"","type":"bool"}],"type":"function"}]
-        tx = BEP20._contract(abi).functions.transfer(
+        abi = [
+            {
+                "constant": False,
+                "inputs": [
+                    {"name": "_to", "type": "address"},
+                    {"name": "_value", "type": "uint256"},
+                ],
+                "name": "transfer",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function",
+            }
+        ]
+        tx = (
+            BEP20._contract(abi)
+            .functions.transfer(
                 Web3.to_checksum_address(to_addr),
-                int(amount * (10**BEP20.decimals))
-            ).build_transaction({"from": from_addr})
+                int(amount * (10**BEP20.decimals)),
+            )
+            .build_transaction({"from": from_addr})
+        )
         gas = BEP20.w3.eth.estimate_gas(tx)
         gas_price = BEP20.w3.eth.gas_price
-        return Decimal(gas * gas_price) / (10 ** 18)     # BNB → BNB
+        return Decimal(gas * gas_price) / (10**18)  # BNB → BNB
 
     @staticmethod
     def transfer(pk, to_addr, amount):
         acct = BEP20.w3.eth.account.privateKeyToAccount(pk)
         nonce = BEP20.w3.eth.get_transaction_count(acct.address)
-        abi = [{"constant":False,"inputs":[{"name":"_to","type":"address"},
-                                           {"name":"_value","type":"uint256"}],
-                "name":"transfer","outputs":[{"name":"","type":"bool"}],"type":"function"}]
-        tx = BEP20._contract(abi).functions.transfer(
-            Web3.to_checksum_address(to_addr),
-            int(amount * (10 ** BEP20.decimals))
-        ).build_transaction({
-            "from": acct.address,
-            "nonce": nonce,
-            "gasPrice": BEP20.w3.eth.gas_price
-        })
+        abi = [
+            {
+                "constant": False,
+                "inputs": [
+                    {"name": "_to", "type": "address"},
+                    {"name": "_value", "type": "uint256"},
+                ],
+                "name": "transfer",
+                "outputs": [{"name": "", "type": "bool"}],
+                "type": "function",
+            }
+        ]
+        tx = (
+            BEP20._contract(abi)
+            .functions.transfer(
+                Web3.to_checksum_address(to_addr),
+                int(amount * (10**BEP20.decimals)),
+            )
+            .build_transaction(
+                {
+                    "from": acct.address,
+                    "nonce": nonce,
+                    "gasPrice": BEP20.w3.eth.gas_price,
+                }
+            )
+        )
         signed = acct.sign_transaction(tx)
         return BEP20.w3.eth.send_raw_transaction(signed.rawTransaction).hex()
 
@@ -164,27 +243,31 @@ class TRC20(TokenNetwork):
     def balance(addr: str) -> Decimal:
         contract = TRC20.client.get_contract(TRC20.contract_addr)
         bal = contract.functions.balanceOf(addr)
-        return Decimal(bal) / (10 ** TRC20.decimals)
+        return Decimal(bal) / (10**TRC20.decimals)
 
     @staticmethod
     def estimate_fee(pk, amount, to_addr):
         priv = PrivateKey(bytes.fromhex(pk))
         txn = (
-            TRC20.client.trx.transfer(priv.public_key.to_base58check_address(),
-                                      to_addr,
-                                      int(amount * (10**TRC20.decimals)))
+            TRC20.client.trx.transfer(
+                priv.public_key.to_base58check_address(),
+                to_addr,
+                int(amount * (10**TRC20.decimals)),
+            )
             .build()
             .inspect()
         )
-        return Decimal(txn.fee) / (10 ** 6)
+        return Decimal(txn.fee) / (10**6)
 
     @staticmethod
     def transfer(pk, to_addr, amount):
         priv = PrivateKey(bytes.fromhex(pk))
         tx = (
-            TRC20.client.trx.transfer(priv.public_key.to_base58check_address(),
-                                      to_addr,
-                                      int(amount * (10 ** TRC20.decimals)))
+            TRC20.client.trx.transfer(
+                priv.public_key.to_base58check_address(),
+                to_addr,
+                int(amount * (10**TRC20.decimals)),
+            )
             .build()
             .sign(priv)
             .broadcast()

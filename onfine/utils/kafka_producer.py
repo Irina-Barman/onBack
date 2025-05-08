@@ -8,7 +8,7 @@
 # def send(topic: str, data: dict):
 #     _producer.send(topic, data)
 #     _producer.flush()
-#Не работает жесткая инциализация
+# Не работает жесткая инциализация
 
 import os
 import json
@@ -49,7 +49,9 @@ def send(topic: str, data: dict) -> bool:
     """
     p = _get_producer()
     if not p:
-        logger.warning(f"KafkaProducer unavailable, dropping message to '{topic}': {data}")
+        logger.warning(
+            f"KafkaProducer unavailable, dropping message to '{topic}': {data}"
+        )
         return False
 
     try:

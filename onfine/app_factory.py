@@ -3,6 +3,7 @@ from .config import Config
 from .extensions import db, migrate, jwt
 from .api import register_namespaces
 
+
 def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
