@@ -11,7 +11,6 @@ user_ns = Namespace("User", description="Операции, связанные с
 # Модель ответа для Swagger
 user_model = user_ns.model("User", {
     "email": fields.String,
-    "nickname": fields.String,
     "isEmailConfirmed": fields.Boolean(attribute="is_email_confirmed"),
 })
 

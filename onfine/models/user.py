@@ -14,7 +14,6 @@ class User(db.Model):
     email_confirmed = db.Column(db.Boolean, default=False)
 
     password_hash = db.Column(db.String(255), nullable=False)
-    nickname = db.Column(db.String(80), nullable=False)
 
     partner_uid = db.Column(
         db.String(36), db.ForeignKey("users.uid"), index=True)

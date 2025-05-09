@@ -14,7 +14,6 @@ err_model = auth_ns.model("Error",   {"error": fields.String})
 register_in = auth_ns.model("RegisterIn", {
     "email":       fields.String(required=True, example="user@example.com"),
     "password":    fields.String(required=True, example="secret"),
-    "nickname":    fields.String(required=True, example="nick"),
     "partner_uid": fields.String(required=False, example="111e2222-…"),
 })
 register_out = auth_ns.model("RegisterOut", {
@@ -39,7 +38,6 @@ reset_in = auth_ns.model("ResetIn", {
 msg_out = auth_ns.model("Message", {"message": fields.String})
 user_out = auth_ns.model("UserOut", {
     "email":            fields.String,
-    "nickname":         fields.String,
     "isEmailConfirmed": fields.Boolean,
     "user_uid":         fields.String,
 })
@@ -60,7 +58,6 @@ class Register(Resource):
             user = AuthService.register_user(
                 email=data["email"],
                 password=data["password"],
-                nickname=data["nickname"],  # Добавлено
                 partner_uid=partner_uid
             )
             return {
@@ -154,7 +151,6 @@ class UserMe(Resource):
         user = User.query.get(get_jwt_identity())
         return {
             "email":            user.email,
-            "nickname":         user.nickname,
             "isEmailConfirmed": user.email_confirmed,
             "user_uid":         user.uid,
         }
