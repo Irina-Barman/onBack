@@ -3,22 +3,40 @@ from flask_restx import Namespace, Resource, fields
 from functools import wraps
 import jwt
 import logging
+from typing import Any, Dict, Tuple
+
 
 from onfine.services.user_service import UserService
 
 user_ns = Namespace("User", description="Операции, связанные с пользователем")
 
 # Модель ответа для Swagger
-user_model = user_ns.model("User", {
-    "email": fields.String,
-    "isEmailConfirmed": fields.Boolean(attribute="is_email_confirmed"),
-})
+user_model = user_ns.model(
+    "User",
+    {
+        "email": fields.String,
+        "isEmailConfirmed": fields.Boolean(attribute="is_email_confirmed"),
+    },
+)
 
 
-# Декоратор проверки JWT
-def token_required(f):
+def token_required(f) -> Any:
+    """Декоратор для проверки наличия и валидности JWT токена.
+
+    Проверяет, есть ли JWT токен в заголовках запроса. Если токен отсутствует
+    или недействителен, возвращает ошибку 403.
+
+    Args:
+        f: Декорируемая функция.
+
+    Returns:
+        Декорированная функция с проверкой токена.
+    """
+
     @wraps(f)
-    def decorated_function(*args, **kwargs):
+    def decorated_function(
+        *args: Any, **kwargs: Any
+    ) -> Tuple[Dict[str, str], int]:
         token = None
         if "Authorization" in request.headers:
             token = request.headers["Authorization"].split(" ")[1]
@@ -29,7 +47,8 @@ def token_required(f):
 
         try:
             data = jwt.decode(
-                token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
+                token, current_app.config["SECRET_KEY"], algorithms=["HS256"]
+            )
             g.user_id = data["user_id"]
         except jwt.ExpiredSignatureError:
             logging.warning("Токен истек.")
@@ -39,6 +58,7 @@ def token_required(f):
             return {"error": "Token is invalid."}, 403
 
         return f(*args, **kwargs)
+
     return decorated_function
 
 
@@ -60,5 +80,8 @@ class UserResource(Resource):
             return {"error": str(e)}, 400
         except Exception as e:
             logging.error(
-                f"Произошла ошибка при получении данных пользователя: {str(e)}")
-            return {"error": "An error occurred while fetching user data."}, 500
+                f"Произошла ошибка при получении данных пользователя: {str(e)}"
+            )
+            return {
+                "error": "An error occurred while fetching user data."
+            }, 500
