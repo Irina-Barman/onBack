@@ -2,10 +2,11 @@ from flask import g, request, current_app
 from flask_restx import Namespace, Resource, fields
 from functools import wraps
 import jwt
+import logging
 
 from onfine.services.user_service import UserService
 
-user_ns = Namespace("User", description="User-related operations")
+user_ns = Namespace("User", description="Операции, связанные с пользователем")
 
 # Модель ответа для Swagger
 user_model = user_ns.model("User", {
@@ -15,8 +16,8 @@ user_model = user_ns.model("User", {
 })
 
 
+# Декоратор проверки JWT
 def token_required(f):
-    """Декоратор проверки JWT"""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         token = None
@@ -24,14 +25,19 @@ def token_required(f):
             token = request.headers["Authorization"].split(" ")[1]
 
         if not token:
+            logging.warning("Попытка доступа без токена.")
             return {"error": "Token is missing."}, 403
 
         try:
             data = jwt.decode(
                 token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
             g.user_id = data["user_id"]
-        except Exception as e:
-            return {"error": "Token is invalid or expired."}, 403
+        except jwt.ExpiredSignatureError:
+            logging.warning("Токен истек.")
+            return {"error": "Token is expired."}, 403
+        except jwt.InvalidTokenError:
+            logging.warning("Недействительный токен.")
+            return {"error": "Token is invalid."}, 403
 
         return f(*args, **kwargs)
     return decorated_function
@@ -39,16 +45,21 @@ def token_required(f):
 
 @user_ns.route("/info")
 class UserResource(Resource):
-    # method_decorators = [token_required]  # применяем декоратор ко всем методам класса
-    # @user_ns.
+    method_decorators = [token_required]
+
     @user_ns.marshal_with(user_model)
     def get(self):
         """Получить данные пользователя по токену"""
         try:
-            # user = UserService.get_user_data(g.user_id)
-            # return user, 200
-            return "ETO JOPA", 200
+            user = UserService.get_user_data(g.user_id)
+            if not user:
+                logging.info(f"Пользователь с ID {g.user_id} не найден.")
+                return {"error": "User not found."}, 404
+            return user, 200
         except ValueError as e:
+            logging.error(f"Ошибка значения: {str(e)}")
             return {"error": str(e)}, 400
         except Exception as e:
-            return {"error": f"An error occurred while fetching user data. \n{e}"}, 500
+            logging.error(
+                f"Произошла ошибка при получении данных пользователя: {str(e)}")
+            return {"error": "An error occurred while fetching user data."}, 500
