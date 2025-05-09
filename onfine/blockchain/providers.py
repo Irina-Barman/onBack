@@ -1,12 +1,12 @@
 import os
-from decimal import Decimal
 from abc import ABC, abstractmethod
+from decimal import Decimal
 from typing import Tuple
 
 from cryptography.fernet import Fernet
-from web3 import Web3
 from tronpy import Tron
 from tronpy.keys import PrivateKey
+from web3 import Web3
 
 FERNET = Fernet(os.getenv("FERNET_KEY").encode())
 
@@ -19,7 +19,7 @@ class TokenNetwork(ABC):
     @staticmethod
     @abstractmethod
     def generate_wallet() -> Tuple[str, str]:
-        """return (address, private_key)"""
+        """Return (address, private_key)"""
 
     @staticmethod
     @abstractmethod
@@ -38,9 +38,7 @@ class TokenNetwork(ABC):
 class ERC20(TokenNetwork):
     infura_key = os.getenv("INFURA_API_KEY")
     w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_key}"))
-    contract_addr = Web3.to_checksum_address(
-        "0xdAC17F958D2ee523a2206206994597C13D831ec7"
-    )
+    contract_addr = Web3.to_checksum_address("0xdAC17F958D2ee523a2206206994597C13D831ec7")
 
     @staticmethod
     def _contract(abi):
@@ -62,13 +60,9 @@ class ERC20(TokenNetwork):
                 "name": "balanceOf",
                 "outputs": [{"name": "balance", "type": "uint256"}],
                 "type": "function",
-            }
+            },
         ]
-        bal = (
-            ERC20._contract(abi)
-            .functions.balanceOf(Web3.to_checksum_address(addr))
-            .call()
-        )
+        bal = ERC20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
         return Decimal(bal) / (10**ERC20.decimals)
 
     # ---------- gas ----------
@@ -85,7 +79,7 @@ class ERC20(TokenNetwork):
                 "name": "transfer",
                 "outputs": [{"name": "", "type": "bool"}],
                 "type": "function",
-            }
+            },
         ]
         tx = (
             ERC20._contract(abi)
@@ -114,7 +108,7 @@ class ERC20(TokenNetwork):
                 "name": "transfer",
                 "outputs": [{"name": "", "type": "bool"}],
                 "type": "function",
-            }
+            },
         ]
         tx = (
             ERC20._contract(abi)
@@ -127,7 +121,7 @@ class ERC20(TokenNetwork):
                     "from": acct.address,
                     "nonce": nonce,
                     "gasPrice": ERC20.w3.eth.gas_price,
-                }
+                },
             )
         )
         signed = acct.sign_transaction(tx)
@@ -137,9 +131,7 @@ class ERC20(TokenNetwork):
 # ------------------------------------------------------------------ BEP-20
 class BEP20(TokenNetwork):
     w3 = Web3(Web3.HTTPProvider("https://bsc-dataseed.binance.org"))
-    contract_addr = Web3.to_checksum_address(
-        "0x55d398326f99059fF775485246999027B3197955"
-    )
+    contract_addr = Web3.to_checksum_address("0x55d398326f99059fF775485246999027B3197955")
 
     @staticmethod
     def _contract(abi):
@@ -159,13 +151,9 @@ class BEP20(TokenNetwork):
                 "name": "balanceOf",
                 "outputs": [{"name": "balance", "type": "uint256"}],
                 "type": "function",
-            }
+            },
         ]
-        bal = (
-            BEP20._contract(abi)
-            .functions.balanceOf(Web3.to_checksum_address(addr))
-            .call()
-        )
+        bal = BEP20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
         return Decimal(bal) / (10**BEP20.decimals)
 
     @staticmethod
@@ -181,7 +169,7 @@ class BEP20(TokenNetwork):
                 "name": "transfer",
                 "outputs": [{"name": "", "type": "bool"}],
                 "type": "function",
-            }
+            },
         ]
         tx = (
             BEP20._contract(abi)
@@ -209,7 +197,7 @@ class BEP20(TokenNetwork):
                 "name": "transfer",
                 "outputs": [{"name": "", "type": "bool"}],
                 "type": "function",
-            }
+            },
         ]
         tx = (
             BEP20._contract(abi)
@@ -222,7 +210,7 @@ class BEP20(TokenNetwork):
                     "from": acct.address,
                     "nonce": nonce,
                     "gasPrice": BEP20.w3.eth.gas_price,
-                }
+                },
             )
         )
         signed = acct.sign_transaction(tx)

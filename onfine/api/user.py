@@ -1,22 +1,25 @@
-from flask import g, request, current_app
-from flask_restx import Namespace, Resource, fields
 from functools import wraps
-import jwt
 
-from onfine.services.user_service import UserService
+import jwt
+from flask import current_app, g, request
+from flask_restx import Namespace, Resource, fields
 
 user_ns = Namespace("User", description="User-related operations")
 
 # Модель ответа для Swagger
-user_model = user_ns.model("User", {
-    "email": fields.String,
-    "nickname": fields.String,
-    "isEmailConfirmed": fields.Boolean(attribute="is_email_confirmed"),
-})
+user_model = user_ns.model(
+    "User",
+    {
+        "email": fields.String,
+        "nickname": fields.String,
+        "isEmailConfirmed": fields.Boolean(attribute="is_email_confirmed"),
+    },
+)
 
 
 def token_required(f):
     """Декоратор проверки JWT"""
+
     @wraps(f)
     def decorated_function(*args, **kwargs):
         token = None
@@ -29,10 +32,11 @@ def token_required(f):
         try:
             data = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
             g.user_id = data["user_id"]
-        except Exception as e:
+        except Exception:
             return {"error": "Token is invalid or expired."}, 403
 
         return f(*args, **kwargs)
+
     return decorated_function
 
 

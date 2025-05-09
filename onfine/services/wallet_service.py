@@ -17,16 +17,15 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Dict, List
 
+from ..blockchain.providers import BEP20, ERC20, TRC20
 from ..extensions import db
-from ..blockchain.providers import ERC20, BEP20, TRC20
+from ..models.ledger_entry import LedgerEntry
+from ..models.referral_balance import ReferralBalance
+from ..models.transactions import Transaction, TxStatus, TxType
+from ..models.transfer_fee import TransferFee
 from ..models.user import User
 from ..models.wallet import Wallet
-from ..models.transfer_fee import TransferFee
-from ..models.transactions import Transaction, TxType, TxStatus
-from ..utils.ledger_decorator import ledger, LedgerType
-from ..models.referral_balance import ReferralBalance
-from ..models.ledger_entry import LedgerEntry
-
+from ..utils.ledger_decorator import LedgerType, ledger
 
 NETWORKS: tuple[str, ...] = ("bep", "erc", "trc")
 
@@ -77,14 +76,12 @@ def user_balance_stub(user: User) -> Dict[str, Decimal]:
     for net in NETWORKS:
         deposits = (
             db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
-            .filter_by(user_id=user.id, network=net,
-                       type=TxType.deposit, status=TxStatus.confirmed)
+            .filter_by(user_id=user.id, network=net, type=TxType.deposit, status=TxStatus.confirmed)
             .scalar()
         )
         withdraws = (
             db.session.query(db.func.coalesce(db.func.sum(Transaction.amount), 0))
-            .filter_by(user_id=user.id, network=net,
-                       type=TxType.withdraw, status=TxStatus.confirmed)
+            .filter_by(user_id=user.id, network=net, type=TxType.withdraw, status=TxStatus.confirmed)
             .scalar()
         )
         res[f"{net}_balance"] = Decimal(deposits) - Decimal(withdraws)
@@ -93,19 +90,14 @@ def user_balance_stub(user: User) -> Dict[str, Decimal]:
 
 # ───────── history
 def history(user: User) -> List[Transaction]:
-    return (
-        Transaction.query.filter_by(user_id=user.id)
-        .order_by(Transaction.created_at.desc())
-        .all()
-    )
+    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
 
 
 def balance_for(user: User, network: str) -> Decimal:
     return user_balance_stub(user)[f"{network}_balance"]
 
 
-@ledger(LedgerType.purchase, direction="out",
-        network_from_arg="network", amount_from_arg="amount")
+@ledger(LedgerType.purchase, direction="out", network_from_arg="network", amount_from_arg="amount")
 def debit(user: User, network: str, amount: Decimal) -> Transaction:
     tx = Transaction(
         user_id=user.id,
@@ -119,10 +111,8 @@ def debit(user: User, network: str, amount: Decimal) -> Transaction:
     return tx
 
 
-@ledger(LedgerType.withdraw, direction="out",
-        network_from_arg="network", amount_from_arg="amount")
-def withdraw_funds(user: User, network: str, amount: Decimal,
-                   dest: str, twofa_code: str) -> Transaction:
+@ledger(LedgerType.withdraw, direction="out", network_from_arg="network", amount_from_arg="amount")
+def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_code: str) -> Transaction:
     if network not in NETWORKS:
         raise ValueError("Unknown network")
     if twofa_code != "123456":
@@ -176,24 +166,19 @@ def ref_credit(user_id: int, amount: Decimal):
     db.session.flush()
 
 
-@ledger(LedgerType.referral, direction="out")        # отрицательное списание
+@ledger(LedgerType.referral, direction="out")  # отрицательное списание
 def ref_debit(user: User, amount: Decimal) -> Transaction:
     rb = ReferralBalance.query.get(user.id)
     if not rb or rb.balance < amount:
         raise ValueError("Not enough referral balance")
     rb.balance -= amount
-    tx = Transaction(
-        user_id=user.id, type=TxType.referral,
-        status=TxStatus.confirmed, network="ref",
-        amount=-amount
-    )
+    tx = Transaction(user_id=user.id, type=TxType.referral, status=TxStatus.confirmed, network="ref", amount=-amount)
     db.session.add(tx)
     db.session.flush()
     return tx
 
 
-@ledger(LedgerType.purchase, direction="out",
-        network_from_arg="network", amount_from_arg="amount")
+@ledger(LedgerType.purchase, direction="out", network_from_arg="network", amount_from_arg="amount")
 def credit_to_balance(user: User, network: str, amount: Decimal) -> Transaction:
     tx = Transaction(
         user_id=user.id,
@@ -208,12 +193,18 @@ def credit_to_balance(user: User, network: str, amount: Decimal) -> Transaction:
 
 
 def credit_to_balance(user_id: int, network: str, amount: Decimal):
-    tx = Transaction(
-        user_id=user_id, type=TxType.deposit,
-        status=TxStatus.confirmed, network=network, amount=amount)
-    db.session.add(tx); db.session.flush()
-    db.session.add(LedgerEntry(
-        user_id=user_id, origin_table="transactions", origin_id=tx.id,
-        type=LedgerType.deposit, direction="in",
-        network=network, amount=amount))
+    tx = Transaction(user_id=user_id, type=TxType.deposit, status=TxStatus.confirmed, network=network, amount=amount)
+    db.session.add(tx)
+    db.session.flush()
+    db.session.add(
+        LedgerEntry(
+            user_id=user_id,
+            origin_table="transactions",
+            origin_id=tx.id,
+            type=LedgerType.deposit,
+            direction="in",
+            network=network,
+            amount=amount,
+        ),
+    )
     db.session.commit()

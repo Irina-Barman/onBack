@@ -2,13 +2,13 @@ from decimal import Decimal
 from typing import List
 
 from ..extensions import db
+from ..models.network_gas import NetworkGas
 from ..models.package import Package
 from ..models.purchase import Purchase, PurchaseStatus
-from ..models.network_gas import NetworkGas
 from ..models.user import User
-from ..utils.ledger_decorator import ledger, LedgerType
 from ..services import wallet_service as wsvc
 from ..utils import kafka_producer as kfk
+from ..utils.ledger_decorator import LedgerType, ledger
 
 
 def list_packages() -> List[Package]:
@@ -54,16 +54,17 @@ def confirm_purchase(purchase_id: int, success: bool) -> Purchase:
     db.session.commit()
 
     if success:
-        kfk.send("purchase.completed", {
-            "purchase_id": p.id,
-            "user_id": p.user_id,
-            "amount": str(p.amount_usdt),
-            "partner_uid": p.user.partner_uid,
-            "network": p.network,
-            "program_type": 1,
-            "ts": p.created_at.isoformat()
-        })
+        kfk.send(
+            "purchase.completed",
+            {
+                "purchase_id": p.id,
+                "user_id": p.user_id,
+                "amount": str(p.amount_usdt),
+                "partner_uid": p.user.partner_uid,
+                "network": p.network,
+                "program_type": 1,
+                "ts": p.created_at.isoformat(),
+            },
+        )
 
     return p
-
-

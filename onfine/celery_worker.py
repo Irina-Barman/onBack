@@ -12,16 +12,13 @@ def distribute_profit(pool_income, pool_expenses):
     и создаёт бухгалтерские проводки.
     """
     from decimal import Decimal  # импорт внутри, чтобы celery picklable
-    from .extensions import db
-    from .models.transactions import Transaction
-    from .models.referral import create_referral_operations
 
-    platform_fee = (
-        Decimal(pool_income) - Decimal(pool_expenses)
-    ) * flask_app.config["PLATFORM_FEE_PERCENT"]
-    distributable = (
-        Decimal(pool_income) - Decimal(pool_expenses) - platform_fee
-    )
+    from .extensions import db
+    from .models.referral import create_referral_operations
+    from .models.transactions import Transaction
+
+    platform_fee = (Decimal(pool_income) - Decimal(pool_expenses)) * flask_app.config["PLATFORM_FEE_PERCENT"]
+    distributable = Decimal(pool_income) - Decimal(pool_expenses) - platform_fee
 
     # пример проводки
     tx = Transaction(

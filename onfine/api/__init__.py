@@ -1,10 +1,11 @@
 from flask import Blueprint
 from flask_restx import Api
+
 from .auth import auth_ns
+from .emcd import ns as emcd_ns
+from .equipment import ns as equipment_ns
 from .package import ns as package_ns
 from .wallet import ns as wallet_ns
-from .equipment import ns as equipment_ns
-from .emcd import ns as emcd_ns
 
 
 def register_namespaces(app):

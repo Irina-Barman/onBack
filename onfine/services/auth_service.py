@@ -2,25 +2,24 @@ from datetime import timedelta
 from typing import Optional
 
 from flask_jwt_extended import create_access_token
-from sqlalchemy.exc import IntegrityError
+
 from ..extensions import db
-from ..models.user import User
 from ..models.token_store import Token
+from ..models.user import User
 from ..utils.mailer import send_email
 
 
 class AuthService:
     # ----------------- REGISTRATION -----------------
     @staticmethod
-    def register_user(email: str, password: str,
-                      partner_uid: Optional[str] = None) -> User:
+    def register_user(email: str, password: str, partner_uid: Optional[str] = None) -> User:
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
 
         user = User(email=email, partner_uid=partner_uid)
         user.set_password(password)
         db.session.add(user)
-        db.session.flush()           # получаем user.id до коммита
+        db.session.flush()  # получаем user.id до коммита
 
         # e-mail confirmation token (24 h)
         token = Token.create(user.id, purpose="confirm_email", ttl_minutes=60 * 24)
@@ -54,12 +53,12 @@ class AuthService:
 
         access_token = create_access_token(
             identity=user.id,
-            expires_delta=timedelta(days=7)   # «длинный» токен на неделю
+            expires_delta=timedelta(days=7),  # «длинный» токен на неделю
         )
         return {
             "accessToken": access_token,
             "tokenType": "Bearer",
-            "expireTimestamp": (db.func.extract("epoch", db.func.now()) + 60 * 60 * 24 * 7)
+            "expireTimestamp": (db.func.extract("epoch", db.func.now()) + 60 * 60 * 24 * 7),
         }
 
     # ----------------- FORGOT PASSWORD -----------------
@@ -87,4 +86,3 @@ class AuthService:
         t.used = True
         db.session.commit()
         return {"message": "Password changed successfully."}
-

@@ -2,6 +2,7 @@
 Декоратор @ledger – автоматическая запись в таблицу ledger_entries
 при успешном выполнении функции-обёртки.
 """
+
 from decimal import Decimal
 from functools import wraps
 from typing import Callable, Optional
@@ -29,17 +30,18 @@ def ledger(
       он должен иметь атрибуты __tablename__ и id (модели SQLAlchemy).
     • user_id определяется из kwargs['user'] или args[0] (если он модель User).
     """
+
     def decorator(fn: Callable):
         @wraps(fn)
         def wrapper(*args, **kwargs):
             result = fn(*args, **kwargs)
 
             try:
-                user   = kwargs.get("user") or (args[0] if args else None)
+                user = kwargs.get("user") or (args[0] if args else None)
                 user_id = getattr(user, "id", None)
 
                 origin_table = getattr(result, "__tablename__", "")
-                origin_id    = getattr(result, "id", 0)
+                origin_id = getattr(result, "id", 0)
 
                 # amount
                 if amount_from_arg and amount_from_arg in kwargs:
@@ -65,12 +67,12 @@ def ledger(
                 )
                 db.session.add(entry)
                 db.session.commit()
-            except Exception as e:      # не рушим бизнес-логику
+            except Exception as e:  # не рушим бизнес-логику
                 db.session.rollback()
                 print(f"[LEDGER] failed: {e}")
 
             return result
+
         return wrapper
+
     return decorator
-
-

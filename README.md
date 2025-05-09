@@ -58,7 +58,7 @@ EMCD_SECRET=...
 
 | Когда делать                      | Команды                                                                                                                                                                  |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Добавили/изменили модель          | `docker compose exec api flask db migrate -m "Добавление миграций"`, `docker compose exec api flask db upgrade`   
+| Добавили/изменили модель          | `docker compose exec api flask db migrate -m "Добавление миграций"`, `docker compose exec api flask db upgrade`
 | Изменили **только** Python-логику | миграция **не нужна**, достаточно `docker compose up -d --build api`                                                                                                     |
 | Не уверены                        | Запустите `migrate`; если увидите *“No changes detected”* — ничего применять не будет.                                                                                   |
 
@@ -150,5 +150,15 @@ docker compose exec api flask --app onfine.app_factory:create_app db upgrade
 open http://localhost:5000/api/docs
 ```
 
+
+### 12. pre-commit
+```python
+HOOK для проверки соответствия кода pep8
+установка из ruquirements.txt
+после установки зависимостей выполнить:
+pre-commit install
+перед каждым пушем изменений в удаленный репозиторий требуется запустить:
+pre-commit run --all-files
+```
 Вы готовы тестировать: создавайте пользователя, инвестируйте, запускайте
 `round_cron` вручную и проверяйте, как приходят профиты.

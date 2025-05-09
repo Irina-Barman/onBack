@@ -1,7 +1,8 @@
 from flask import Flask
-from .config import Config
-from .extensions import db, migrate, jwt
+
 from .api import register_namespaces
+from .config import Config
+from .extensions import db, jwt, migrate
 
 
 def create_app():

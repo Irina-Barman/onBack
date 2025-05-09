@@ -1,6 +1,7 @@
-from onfine.models.purchase import Purchase
-from onfine.database import db
 import logging
+
+from onfine.database import db
+from onfine.models.purchase import Purchase
 
 
 class PaymentService:

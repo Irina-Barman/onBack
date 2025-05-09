@@ -1,5 +1,5 @@
+from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
-from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from onfine.models.user import User
 from onfine.services import package_service as svc
@@ -7,38 +7,50 @@ from onfine.services import package_service as svc
 ns = Namespace("packages", description="Каталог пакетов и покупки")
 
 # ---------- swagger models ----------
-_pkg = ns.model("Package", {
-    "id":          fields.Integer,
-    "name":        fields.String,
-    "type":        fields.String,
-    "price":       fields.String,
-    "description": fields.String,
-})
+_pkg = ns.model(
+    "Package",
+    {
+        "id": fields.Integer,
+        "name": fields.String,
+        "type": fields.String,
+        "price": fields.String,
+        "description": fields.String,
+    },
+)
 
 _gas = ns.model("Gas", {"bep": fields.String, "erc": fields.String, "trc": fields.String})
 
-_buy_in = ns.model("BuyIn", {                     # тело запроса
-    "package_id": fields.Integer(required=True),
-    "network":    fields.String(required=True, enum=["bep", "erc", "trc"]),
-})
-_buy_out = ns.model("PurchaseOut", {              # тело ответа
-    "purchase_id": fields.Integer,
-    "status":      fields.String,
-    "summ":        fields.String,
-    "gas":         fields.String,
-})
+_buy_in = ns.model(
+    "BuyIn",
+    {  # тело запроса
+        "package_id": fields.Integer(required=True),
+        "network": fields.String(required=True, enum=["bep", "erc", "trc"]),
+    },
+)
+_buy_out = ns.model(
+    "PurchaseOut",
+    {  # тело ответа
+        "purchase_id": fields.Integer,
+        "status": fields.String,
+        "summ": fields.String,
+        "gas": fields.String,
+    },
+)
 
 
-
-
-
-_confirm_in = ns.model("ConfirmIn", {
-    "success": fields.Boolean(required=True, description="true — оплата прошла, false — отмена"),
-})
-_confirm_out = ns.model("ConfirmOut", {
-    "purchase_id": fields.Integer,
-    "status":      fields.String,
-})
+_confirm_in = ns.model(
+    "ConfirmIn",
+    {
+        "success": fields.Boolean(required=True, description="true — оплата прошла, false — отмена"),
+    },
+)
+_confirm_out = ns.model(
+    "ConfirmOut",
+    {
+        "purchase_id": fields.Integer,
+        "status": fields.String,
+    },
+)
 
 
 # ---------- /packages ----------
@@ -61,7 +73,7 @@ class Gas(Resource):
 @ns.route("/purchases")
 class Purchase(Resource):
     @jwt_required()
-    @ns.expect(_buy_in)                       # ← показывает body в Swagger
+    @ns.expect(_buy_in)  # ← показывает body в Swagger
     @ns.marshal_with(_buy_out, code=201)
     def post(self):
         user = User.query.get(get_jwt_identity())
@@ -76,7 +88,7 @@ class Purchase(Resource):
             "purchase_id": p.id,
             "status": p.status.value,
             "summ": str(p.amount_usdt),
-            "gas":  str(p.gas_usdt),
+            "gas": str(p.gas_usdt),
         }, 201
 
 
@@ -91,14 +103,3 @@ class PurchaseConfirm(Resource):
         success = ns.payload["success"]
         p = svc.confirm_purchase(purchase_id, success)
         return {"purchase_id": p.id, "status": p.status.value}
-
-
-
-
-
-
-
-
-
-
-

@@ -1,6 +1,4 @@
-from flask import g
 from onfine.models.user import User
-from onfine.database import db
 
 
 class UserService:
