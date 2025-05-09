@@ -27,7 +27,8 @@ def token_required(f):
             return {"error": "Token is missing."}, 403
 
         try:
-            data = jwt.decode(token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
+            data = jwt.decode(
+                token, current_app.config["SECRET_KEY"], algorithms=["HS256"])
             g.user_id = data["user_id"]
         except Exception as e:
             return {"error": "Token is invalid or expired."}, 403

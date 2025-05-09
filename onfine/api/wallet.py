@@ -52,15 +52,18 @@ _tx = ns.model("Tx", {
     "timestamp": fields.DateTime(attribute="created_at"),
 })
 
-_check_in = ns.model("CheckWalletIn", {"wallet_address": fields.String(required=True)})
+_check_in = ns.model(
+    "CheckWalletIn", {"wallet_address": fields.String(required=True)})
 _check_out = ns.model("CheckWalletOut", {"status": fields.String})
 
 _ref_bal = ns.model("RefBalance", {"balance": fields.String})
-_ref_wd  = ns.model("RefWithdrawIn", {
+_ref_wd = ns.model("RefWithdrawIn", {
     "amount": fields.String(required=True, example="25.00")
 })
 
 # ---------- /create_wallet ----------
+
+
 @ns.route("/create_wallet")
 class WalletCreate(Resource):
     @jwt_required()
@@ -152,13 +155,15 @@ class RefBal(Resource):
         return {"balance": str(svc.ref_balance(user))}
 
 # ---------- /referral_withdraw ----------
+
+
 @ns.route("/referral_withdraw")
 class RefWithdraw(Resource):
     @jwt_required()
     @ns.expect(_ref_wd)
     def post(self):
         user = User.query.get(get_jwt_identity())
-        amt  = Decimal(ns.payload["amount"])
+        amt = Decimal(ns.payload["amount"])
         if amt < Decimal(os.getenv("REF_MIN_PAYOUT", "10")):
             return {"error": "below minimum"}, 400
         svc.ref_debit(user, amt)          # переносим на основной баланс

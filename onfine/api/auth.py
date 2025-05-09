@@ -1,4 +1,3 @@
-from datetime import datetime
 from flask import request
 from flask_restx import Namespace, Resource, fields
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -6,7 +5,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from onfine.services.auth_service import AuthService
 from onfine.models.user import User
 
-auth_ns = Namespace("auth", description="Регистрация • логин • восстановление пароля")
+auth_ns = Namespace(
+    "auth", description="Регистрация • логин • восстановление пароля")
 
 # ----------- Swagger-модели ----------
 err_model = auth_ns.model("Error",   {"error": fields.String})
@@ -22,20 +22,22 @@ register_out = auth_ns.model("RegisterOut", {
     "user_id": fields.Integer,
 })
 
-confirm_in = auth_ns.model("ConfirmEmailIn", {"token": fields.String(required=True)})
-login_in   = auth_ns.model("LoginIn", {"email":  fields.String, "password": fields.String})
-login_out  = auth_ns.model("LoginOut", {
+confirm_in = auth_ns.model(
+    "ConfirmEmailIn", {"token": fields.String(required=True)})
+login_in = auth_ns.model(
+    "LoginIn", {"email":  fields.String, "password": fields.String})
+login_out = auth_ns.model("LoginOut", {
     "accessToken":      fields.String,
     "tokenType":        fields.String,
     "expireTimestamp":  fields.Integer,
 })
-forgot_in  = auth_ns.model("ForgotIn", {"email": fields.String})
-reset_in   = auth_ns.model("ResetIn", {
+forgot_in = auth_ns.model("ForgotIn", {"email": fields.String})
+reset_in = auth_ns.model("ResetIn", {
     "token":       fields.String,
     "newPassword": fields.String,
 })
-msg_out    = auth_ns.model("Message", {"message": fields.String})
-user_out   = auth_ns.model("UserOut", {
+msg_out = auth_ns.model("Message", {"message": fields.String})
+user_out = auth_ns.model("UserOut", {
     "email":            fields.String,
     "nickname":         fields.String,
     "isEmailConfirmed": fields.Boolean,
@@ -43,6 +45,8 @@ user_out   = auth_ns.model("UserOut", {
 })
 
 # ----------- /register ----------
+
+
 @auth_ns.route("/register")
 class Register(Resource):
     @auth_ns.expect(register_in)
@@ -50,11 +54,13 @@ class Register(Resource):
     @auth_ns.response(400, "Validation error", err_model)
     def post(self):
         data = request.json or {}
-        partner_uid = data.get("partner_uid") or request.args.get("partner_uid")
+        partner_uid = data.get(
+            "partner_uid") or request.args.get("partner_uid")
         try:
             user = AuthService.register_user(
                 email=data["email"],
                 password=data["password"],
+                nickname=data["nickname"],  # Добавлено
                 partner_uid=partner_uid
             )
             return {
@@ -65,6 +71,8 @@ class Register(Resource):
             return {"error": str(e)}, 400
 
 # ----------- /confirm-email ----------
+
+
 @auth_ns.route("/confirm-email")
 class ConfirmEmail(Resource):
     @auth_ns.expect(confirm_in)
@@ -79,6 +87,8 @@ class ConfirmEmail(Resource):
             return {"error": str(e)}, 400
 
 # ----------- /login ----------
+
+
 @auth_ns.route("/login")
 class Login(Resource):
     @auth_ns.expect(login_in)
@@ -92,6 +102,8 @@ class Login(Resource):
             return {"error": str(e)}, 400
 
 # ----------- /forgot-password ----------
+
+
 @auth_ns.route("/forgot-password")
 class ForgotPassword(Resource):
     @auth_ns.expect(forgot_in)
@@ -106,6 +118,8 @@ class ForgotPassword(Resource):
             return {"error": str(e)}, 400
 
 # ----------- /reset-password ----------
+
+
 @auth_ns.route("/reset-password")
 class ResetPassword(Resource):
     @auth_ns.expect(reset_in)
@@ -119,6 +133,8 @@ class ResetPassword(Resource):
             return {"error": str(e)}, 400
 
 # ----------- /logout ----------
+
+
 @auth_ns.route("/logout")
 class Logout(Resource):
     @auth_ns.marshal_with(msg_out)
@@ -128,6 +144,8 @@ class Logout(Resource):
         return {"message": "Successfully logged out."}
 
 # ----------- /user ----------
+
+
 @auth_ns.route("/user")
 class UserMe(Resource):
     @jwt_required()
