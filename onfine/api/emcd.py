@@ -136,7 +136,7 @@ class Info(Resource):
     def get(self) -> Dict[str, Any]:
         """Получает информацию об аккаунте.
 
-        Возвращает:
+        Return:
             dict: Информация об аккаунте пользователя.
         """
         return svc.get_account_info()
@@ -152,7 +152,7 @@ class Workers(Resource):
         Аргументы:
             coin (str): Идентификатор крипты.
 
-        Возвращает:
+        Return:
             dict: Информация о работниках для указанной крипты.
         """
         return svc.get_workers(coin)
@@ -168,7 +168,7 @@ class Income(Resource):
         Аргументы:
             coin (str): Идентификатор крипты.
 
-        Возвращает:
+        Return:
             dict: Информация о доходах для указанной крипты.
         """
         return svc.get_income(coin)
@@ -184,7 +184,7 @@ class Payouts(Resource):
         Аргументы:
             coin (str): Идентификатор крипты.
 
-        Возвращает:
+        Return:
             dict: Информация о выплатах для указанной крипты.
         """
         return svc.get_payouts(coin)

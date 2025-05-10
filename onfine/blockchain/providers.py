@@ -19,7 +19,7 @@ class TokenNetwork(ABC):
     @staticmethod
     @abstractmethod
     def generate_wallet() -> Tuple[str, str]:
-        """Создает новый кошелек и возвращает адрес и приватный ключ.
+        """Создает новый кошелек и Return адрес и приватный ключ.
 
         Returns:
             Tuple[str, str]: Кортеж с адресом и приватным ключом.
@@ -77,7 +77,7 @@ class ERC20(TokenNetwork):
 
     @staticmethod
     def _contract(abi: list) -> Contract:
-        """Создает и возвращает объект контракта на основе заданного ABI.
+        """Создает и Return объект контракта на основе заданного ABI.
 
         Args:
             abi (list): ABI контракта.
@@ -90,7 +90,7 @@ class ERC20(TokenNetwork):
     # ---------- wallet ----------
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
-        """Создает новый кошелек и возвращает адрес и приватный ключ.
+        """Создает новый кошелек и Return адрес и приватный ключ.
 
         Returns:
             Tuple[str, str]: Кортеж с адресом и приватным ключом.
@@ -217,7 +217,7 @@ class BEP20(TokenNetwork):
     @staticmethod
     def _contract(abi: List[dict]) -> Contract:
         """
-        Создает и возвращает объект контракта на основе заданного ABI.
+        Создает и Return объект контракта на основе заданного ABI.
 
         Args:
             abi (List[dict]): ABI контракта.
@@ -230,7 +230,7 @@ class BEP20(TokenNetwork):
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """
-        Создает новый кошелек и возвращает адрес и приватный ключ.
+        Создает новый кошелек и Return адрес и приватный ключ.
 
         Returns:
             Tuple[str, str]: Кортеж с адресом и приватным ключом.
@@ -356,7 +356,7 @@ class TRC20(TokenNetwork):
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """
-        Создает новый кошелек и возвращает адрес и приватный ключ.
+        Создает новый кошелек и Return адрес и приватный ключ.
 
         Returns:
             Tuple[str, str]: Кортеж с адресом и приватным ключом.

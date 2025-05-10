@@ -13,7 +13,7 @@ from ..utils.ledger_decorator import LedgerType, ledger
 
 def list_packages() -> List[Package]:
     """
-    Возвращает список всех доступных пакетов.
+    Return список всех доступных пакетов.
 
     :return: Список объектов Package.
     """

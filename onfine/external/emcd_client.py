@@ -29,7 +29,7 @@ def _sign(p: str, ts: str) -> str:
 
 def _get(path: str) -> Dict[str, Any]:
     """
-    Отправляет GET-запрос к API и возвращает данные.
+    Отправляет GET-запрос к API и Return данные.
 
     Args:
         path (str): Путь запроса.

@@ -26,7 +26,7 @@ def record_mined(
         period_start (Any): Начало периода.
         period_end (Any): Конец периода.
 
-    Возвращает:
+    Return:
         MiningProfitBatch: Созданный объект Batch.
     """
     eq = MiningEquipment.query.get(equipment_id)
@@ -54,8 +54,8 @@ def distribute_batch(batch_id: int) -> None:
     Параметры:
         batch_id (int): Идентификатор батча для распределения.
 
-    Возвращает:
-        None: Функция не возвращает значения. Все изменения сохраняются в базе
+    Return:
+        None: Функция не Return значения. Все изменения сохраняются в базе
         данных.
     """
     batch = MiningProfitBatch.query.get(batch_id)

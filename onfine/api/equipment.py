@@ -44,7 +44,7 @@ class EqList(Resource):
     def get(self) -> List[Dict[str, Any]]:
         """Получает список доступного майнинг-оборудования.
 
-        Возвращает:
+        Return:
             list: Список объектов оборудования.
         """
         from onfine.models.mining_equipment import MiningEquipment
@@ -59,7 +59,7 @@ class Invest(Resource):
     def post(self) -> Dict[str, str]:
         """Создает инвестицию в оборудование.
 
-        Возвращает:
+        Return:
             dict: Статус операции.
         """
         user = User.query.get(get_jwt_identity())
@@ -74,7 +74,7 @@ class Batch(Resource):
     def post(self) -> Dict[str, int]:
         """Записывает данные о полученом оборудовании.
 
-        Возвращает:
+        Return:
             dict: ID созданной партии.
         """
         d = ns.payload

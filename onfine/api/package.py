@@ -68,7 +68,7 @@ class PackageList(Resource):
     def get(self) -> List[Dict[str, Any]]:
         """Получает список доступных пакетов.
 
-        Возвращает:
+        Return:
             list: Список объектов пакетов.
         """
         return svc.list_packages()
@@ -81,7 +81,7 @@ class Gas(Resource):
     def get(self) -> Dict[str, str]:
         """Получает информацию о газовых сетях.
 
-        Возвращает:
+        Return:
             dict: Словарь с информацией о газовых сетях.
         """
         return {k: str(v) for k, v in svc.gas_table().items()}
@@ -96,7 +96,7 @@ class Purchase(Resource):
     def post(self) -> Dict[str, Any]:
         """Создает покупку пакета.
 
-        Возвращает:
+        Return:
             dict: Информация о покупке, включая ID, статус, сумму и газ.
         """
         user = User.query.get(get_jwt_identity())
@@ -127,7 +127,7 @@ class PurchaseConfirm(Resource):
         Аргументы:
             purchase_id (int): ID покупки для подтверждения.
 
-        Возвращает:
+        Return:
             dict: Информация о подтвержденной покупке, включая ID и статус.
         """
         success = ns.payload["success"]

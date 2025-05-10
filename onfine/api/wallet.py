@@ -95,7 +95,7 @@ class WalletCreate(Resource):
         """
         Создает новые кошельки для пользователя.
 
-        Возвращает:
+        Return:
             dict: Словарь с адресами созданных кошельков.
         """
         user = User.query.get(get_jwt_identity())
@@ -112,7 +112,7 @@ class WalletGet(Resource):
         """
         Получает адреса кошельков пользователя.
 
-        Возвращает:
+        Return:
             dict: Словарь с адресами кошельков или None, если они отсутствуют.
         """
         user = User.query.get(get_jwt_identity())
@@ -128,7 +128,7 @@ class TransferFee(Resource):
         """
         Получает информацию о комиссиях за переводы.
 
-        Возвращает:
+        Return:
             dict: Словарь с комиссиями для различных сетей.
         """
         return {k: str(v) for k, v in svc.transfer_fee_table().items()}
@@ -144,7 +144,7 @@ class Withdraw(Resource):
         """
         Выводит средства с кошелька пользователя.
 
-        Возвращает:
+        Return:
             dict: Статус операции и ID транзакции.
         """
         user = User.query.get(get_jwt_identity())
@@ -169,7 +169,7 @@ class Balance(Resource):
         """
         Получает баланс пользователя по всем сетям.
 
-        Возвращает:
+        Return:
             dict: Словарь с балансами для различных сетей.
         """
         user = User.query.get(get_jwt_identity())
@@ -187,7 +187,7 @@ class Transactions(Resource):
         """
         Получает историю транзакций пользователя.
 
-        Возвращает:
+        Return:
             list: Список транзакций пользователя.
         """
         user = User.query.get(get_jwt_identity())
@@ -203,7 +203,7 @@ class CheckWallet(Resource):
         """
         Проверяет безопасность кошелька.
 
-        Возвращает:
+        Return:
             dict: Статус проверки кошелька.
         """
         return {"status": "safe"}
@@ -218,7 +218,7 @@ class RefBal(Resource):
         """
         Получает баланс реферальной программы пользователя.
 
-        Возвращает:
+        Return:
             dict: Словарь с реферальным балансом.
         """
         user = User.query.get(get_jwt_identity())
@@ -234,7 +234,7 @@ class RefWithdraw(Resource):
         """
         Выводит средства из реферального баланса пользователя.
 
-        Возвращает:
+        Return:
             dict: Статус операции.
         """
         user = User.query.get(get_jwt_identity())

@@ -69,19 +69,19 @@ def create_wallets(user: User) -> Dict[str, str]:
 
 
 def list_wallets(user: User) -> Dict[str, str] | None:
-    """Возвращает список кошельков пользователя."""
+    """Return список кошельков пользователя."""
     rows = {w.network: w.address for w in user.wallets}
     return rows or None
 
 
 # ───────── fees / balance
 def transfer_fee_table() -> Dict[str, Decimal]:
-    """Возвращает таблицу сборов за перевод для каждой сети."""
+    """Return таблицу сборов за перевод для каждой сети."""
     return {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
 
 
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
-    """Возвращает расчетный баланс пользователя для каждой сети."""
+    """Return расчетный баланс пользователя для каждой сети."""
     res: Dict[str, Decimal] = {}
     for net in NETWORKS:
         deposits = (
@@ -114,7 +114,7 @@ def user_balance_stub(user: User) -> Dict[str, Decimal]:
 
 # ───────── history
 def history(user: User) -> List[Transaction]:
-    """Возвращает историю транзакций пользователя."""
+    """Return историю транзакций пользователя."""
     return (
         Transaction.query.filter_by(user_id=user.id)
         .order_by(Transaction.created_at.desc())
@@ -123,7 +123,7 @@ def history(user: User) -> List[Transaction]:
 
 
 def balance_for(user: User, network: str) -> Decimal:
-    """Возвращает баланс пользователя для указанной сети."""
+    """Return баланс пользователя для указанной сети."""
     return user_balance_stub(user)[f"{network}_balance"]
 
 
@@ -200,7 +200,7 @@ def withdraw_funds(
 
 
 def ref_balance(user: User) -> Decimal:
-    """Возвращает реферальный баланс пользователя."""
+    """Return реферальный баланс пользователя."""
     rb = ReferralBalance.query.get(user.id)
     return Decimal(rb.balance) if rb else Decimal(0)
 

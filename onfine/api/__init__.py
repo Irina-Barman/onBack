@@ -19,7 +19,7 @@ def register_namespaces(app: Flask) -> None:
         app (Flask): Экземпляр приложения Flask,
         в котором регистрируются пространства имен.
 
-    Возвращает:
+    Return:
         None
     """
     bp = Blueprint("api", __name__, url_prefix="/api")

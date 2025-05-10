@@ -8,7 +8,7 @@ from .extensions import db, jwt, migrate
 def create_app() -> Flask:
     """Создает и настраивает экземпляр Flask приложения.
 
-    Возвращает:
+    Return:
         Flask: Настроенный экземпляр приложения Flask.
     """
     app = Flask(__name__)
