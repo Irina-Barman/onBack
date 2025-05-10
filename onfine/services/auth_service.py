@@ -93,9 +93,7 @@ class AuthService:
         return {
             "accessToken": access_token,
             "tokenType": "Bearer",
-            "expireTimestamp": (
-                db.func.extract("epoch", db.func.now()) + 60 * 60 * 24 * 7
-            ),
+            "expireTimestamp": (db.func.extract("epoch", db.func.now()) + 60 * 60 * 24 * 7),
         }
 
     # ----------------- FORGOT PASSWORD -----------------
@@ -132,9 +130,7 @@ class AuthService:
         :raises ValueError: Если токен недействителен или истек.
         :return: Словарь с сообщением об успешном изменении пароля.
         """
-        t = Token.query.filter_by(
-            token=token, purpose="reset_pwd", used=False
-        ).first()
+        t = Token.query.filter_by(token=token, purpose="reset_pwd", used=False).first()
         if not t or t.expires_at < db.func.now():
             raise ValueError("Invalid or expired token.")
 

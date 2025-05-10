@@ -2,8 +2,10 @@ from functools import wraps
 from typing import Any, Callable, Dict, Tuple
 
 import jwt
-from flask import current_app, g, request
+from flask import current_app, g, logging, request
 from flask_restx import Namespace, Resource, fields
+
+from onfine.services.user_service import UserService
 
 user_ns = Namespace("User", description="Операции, связанные с пользователем")
 
@@ -83,11 +85,7 @@ class UserResource(Resource):
             logging.error(f"Ошибка значения: {str(e)}")
             return {"error": str(e)}, 400
         except Exception as e:
-            logging.error(
-                f"Произошла ошибка при получении данных пользователя: {str(e)}"
-            )
+            logging.error(f"Произошла ошибка при получении данных пользователя: {str(e)}")
             return {
-                
-                "error": "An error occurred while fetching user data."
-            ,
+                "error": "An error occurred while fetching user data.",
             }, 500

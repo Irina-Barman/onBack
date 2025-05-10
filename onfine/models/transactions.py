@@ -27,14 +27,12 @@ class Transaction(db.Model):
     __tablename__ = "transactions"
 
     id = db.Column(db.BigInteger, primary_key=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey(
-        "users.id"), nullable=False)
+    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
 
-    type = db.Column(db.Enum(TxType),   nullable=False)
-    status = db.Column(db.Enum(TxStatus), nullable=False,
-                       default=TxStatus.pending)
+    type = db.Column(db.Enum(TxType), nullable=False)
+    status = db.Column(db.Enum(TxStatus), nullable=False, default=TxStatus.pending)
     network = db.Column(db.String(8))
-    amount = db.Column(db.Numeric(18, 2), nullable=False)   # чистая сумма
+    amount = db.Column(db.Numeric(18, 2), nullable=False)  # чистая сумма
     # комиссия сети (withdraw)
     fee = db.Column(db.Numeric(18, 2))
     address = db.Column(db.String(128))

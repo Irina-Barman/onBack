@@ -25,12 +25,8 @@ def distribute_profit(pool_income: float, pool_expenses: float) -> None:
     from .models.referral import create_referral_operations
     from .models.transactions import Transaction
 
-    platform_fee = (
-        Decimal(pool_income) - Decimal(pool_expenses)
-    ) * flask_app.config["PLATFORM_FEE_PERCENT"]
-    distributable = (
-        Decimal(pool_income) - Decimal(pool_expenses) - platform_fee
-    )
+    platform_fee = (Decimal(pool_income) - Decimal(pool_expenses)) * flask_app.config["PLATFORM_FEE_PERCENT"]
+    distributable = Decimal(pool_income) - Decimal(pool_expenses) - platform_fee
 
     # пример проводки
     tx = Transaction(

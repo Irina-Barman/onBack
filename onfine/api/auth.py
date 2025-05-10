@@ -7,9 +7,7 @@ from flask_restx import Namespace, Resource, fields
 from onfine.models.user import User
 from onfine.services.auth_service import AuthService
 
-auth_ns = Namespace(
-    "auth", description="Регистрация • логин • восстановление пароля"
-)
+auth_ns = Namespace("auth", description="Регистрация • логин • восстановление пароля")
 
 # ----------- Swagger-модели ----------
 err_model = auth_ns.model("Error", {"error": fields.String})
@@ -31,10 +29,12 @@ register_out = auth_ns.model(
 )
 
 confirm_in = auth_ns.model(
-    "ConfirmEmailIn", {"token": fields.String(required=True)},
+    "ConfirmEmailIn",
+    {"token": fields.String(required=True)},
 )
 login_in = auth_ns.model(
-    "LoginIn", {"email": fields.String, "password": fields.String},
+    "LoginIn",
+    {"email": fields.String, "password": fields.String},
 )
 login_out = auth_ns.model(
     "LoginOut",
@@ -94,9 +94,7 @@ class Register(Resource):
                 partner_uid=partner_uid,
             )
             return {
-                "message": (
-                    "Registration successful. Please confirm your e-mail."
-                ),
+                "message": ("Registration successful. Please confirm your e-mail."),
                 "user_id": user.id,
             }, 200
         except ValueError as e:

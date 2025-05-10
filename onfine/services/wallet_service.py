@@ -115,11 +115,7 @@ def user_balance_stub(user: User) -> Dict[str, Decimal]:
 # ───────── history
 def history(user: User) -> List[Transaction]:
     """Return историю транзакций пользователя."""
-    return (
-        Transaction.query.filter_by(user_id=user.id)
-        .order_by(Transaction.created_at.desc())
-        .all()
-    )
+    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
 
 
 def balance_for(user: User, network: str) -> Decimal:

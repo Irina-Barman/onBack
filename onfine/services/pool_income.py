@@ -70,15 +70,12 @@ def distribute_round(round_id: int) -> None:
     if income == 0:
         return
 
-    tot_inv: Decimal = (
-        db.session.query(db.func.sum(RoundInvestment.amount))
-        .filter_by(round_id=round_id)
-        .scalar()
-    )
+    tot_inv: Decimal = db.session.query(db.func.sum(RoundInvestment.amount)).filter_by(round_id=round_id).scalar()
 
     for inv in RoundInvestment.query.filter_by(round_id=round_id):
         payout: Decimal = (income * (inv.amount / tot_inv)).quantize(
-            Decimal("0.01"), ROUND_DOWN,
+            Decimal("0.01"),
+            ROUND_DOWN,
         )
         if payout == 0:
             continue
