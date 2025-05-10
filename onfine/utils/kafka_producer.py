@@ -10,12 +10,12 @@
 #     _producer.flush()
 # Не работает жесткая инциализация
 
-import os
 import json
 import logging
+import os
+
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
-
 
 logger = logging.getLogger(__name__)
 _producer: KafkaProducer | None = None
@@ -45,13 +45,11 @@ def _get_producer() -> KafkaProducer | None:
 def send(topic: str, data: dict) -> bool:
     """
     Отправить сообщение в Kafka.
-    Возвращает True, если удалось запланировать отправку, False иначе.
+    Return True, если удалось запланировать отправку, False иначе.
     """
     p = _get_producer()
     if not p:
-        logger.warning(
-            f"KafkaProducer unavailable, dropping message to '{topic}': {data}"
-        )
+        logger.warning(f"KafkaProducer unavailable, dropping message to '{topic}': {data}")
         return False
 
     try:

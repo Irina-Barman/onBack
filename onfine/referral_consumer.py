@@ -1,12 +1,14 @@
-import json, os, time
+import json
+import os
 from decimal import Decimal
 
 from kafka import KafkaConsumer
+
 from onfine.app_factory import create_app
 from onfine.extensions import db
-from onfine.models import User, Transaction, ReferralLevel
-from onfine.models.transactions import TxType, TxStatus
+from onfine.models import ReferralLevel, Transaction, User
 from onfine.models.ledger_entry import LedgerEntry, LedgerType
+from onfine.models.transactions import TxStatus, TxType
 from onfine.services import wallet_service as wsvc
 
 consumer = KafkaConsumer(
@@ -20,9 +22,7 @@ consumer = KafkaConsumer(
 
 
 def _percent(ptype: int, lvl: int) -> Decimal:
-    row = ReferralLevel.query.filter_by(
-        program_type=ptype, level=lvl, active=True
-    ).first()
+    row = ReferralLevel.query.filter_by(program_type=ptype, level=lvl, active=True).first()
     return Decimal(row.percent) / 100 if row else Decimal(0)
 
 
@@ -64,7 +64,7 @@ with app.app_context():
                         direction="in",
                         network=net,
                         amount=reward,
-                    )
+                    ),
                 )
 
                 wsvc.ref_credit(parent.id, reward)
@@ -75,5 +75,5 @@ with app.app_context():
         db.session.commit()
 
 
-# docker compose exec api python -m onfine.referral_consumer 
+# docker compose exec api python -m onfine.referral_consumer
 # #планировка на кроне

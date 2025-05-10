@@ -1,11 +1,9 @@
 from datetime import datetime
+
 from ..extensions import db
 
-
 # Определяем ENUM с именем
-RoundState = db.Enum(
-    "OPEN", "CLOSED", "MINING", "DONE", name="roundstate_enum"
-)
+RoundState = db.Enum("OPEN", "CLOSED", "MINING", "DONE", name="roundstate_enum")
 
 
 class FundingRound(db.Model):

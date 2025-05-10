@@ -1,17 +1,23 @@
 from datetime import datetime
 from enum import Enum
+
 from ..extensions import db
 
 
 class TxType(str, Enum):
     deposit = "deposit"
+    deposit = "deposit"
     withdraw = "withdraw"
     purchase = "purchase"
+    profit = "profit"
     profit = "profit"
     referral = "referral"
 
 
 class TxStatus(str, Enum):
+    pending = "pending"
+    confirmed = "confirmed"
+    canceled = "canceled"
     pending = "pending"
     confirmed = "confirmed"
     canceled = "canceled"
