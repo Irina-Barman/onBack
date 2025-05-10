@@ -45,7 +45,7 @@ def _get_producer() -> KafkaProducer | None:
 def send(topic: str, data: dict) -> bool:
     """
     Отправить сообщение в Kafka.
-    Возвращает True, если удалось запланировать отправку, False иначе.
+    Return True, если удалось запланировать отправку, False иначе.
     """
     p = _get_producer()
     if not p:

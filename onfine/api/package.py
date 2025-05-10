@@ -1,3 +1,5 @@
+from typing import Any, Dict, List
+
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
@@ -18,7 +20,10 @@ _pkg = ns.model(
     },
 )
 
-_gas = ns.model("Gas", {"bep": fields.String, "erc": fields.String, "trc": fields.String})
+_gas = ns.model(
+    "Gas",
+    {"bep": fields.String, "erc": fields.String, "trc": fields.String},
+)
 
 _buy_in = ns.model(
     "BuyIn",
@@ -41,7 +46,10 @@ _buy_out = ns.model(
 _confirm_in = ns.model(
     "ConfirmIn",
     {
-        "success": fields.Boolean(required=True, description="true — оплата прошла, false — отмена"),
+        "success": fields.Boolean(
+            required=True,
+            description="true — оплата прошла, false — отмена.",
+        ),
     },
 )
 _confirm_out = ns.model(
@@ -57,7 +65,12 @@ _confirm_out = ns.model(
 @ns.route("/")
 class PackageList(Resource):
     @ns.marshal_list_with(_pkg)
-    def get(self):
+    def get(self) -> List[Dict[str, Any]]:
+        """Получает список доступных пакетов.
+
+        Return:
+            list: Список объектов пакетов.
+        """
         return svc.list_packages()
 
 
@@ -65,7 +78,12 @@ class PackageList(Resource):
 @ns.route("/gas")
 class Gas(Resource):
     @ns.marshal_with(_gas)
-    def get(self):
+    def get(self) -> Dict[str, str]:
+        """Получает информацию о газовых сетях.
+
+        Return:
+            dict: Словарь с информацией о газовых сетях.
+        """
         return {k: str(v) for k, v in svc.gas_table().items()}
 
 
@@ -75,7 +93,12 @@ class Purchase(Resource):
     @jwt_required()
     @ns.expect(_buy_in)  # ← показывает body в Swagger
     @ns.marshal_with(_buy_out, code=201)
-    def post(self):
+    def post(self) -> Dict[str, Any]:
+        """Создает покупку пакета.
+
+        Return:
+            dict: Информация о покупке, включая ID, статус, сумму и газ.
+        """
         user = User.query.get(get_jwt_identity())
         data = ns.payload
 
@@ -98,8 +121,15 @@ class PurchaseConfirm(Resource):
     @jwt_required()
     @ns.expect(_confirm_in)
     @ns.marshal_with(_confirm_out)
-    def post(self, purchase_id):
-        """Подтвердить оплату (или отменить)."""
+    def post(self, purchase_id: int) -> Dict[str, Any]:
+        """Подтверждает оплату (или отменяет).
+
+        Аргументы:
+            purchase_id (int): ID покупки для подтверждения.
+
+        Return:
+            dict: Информация о подтвержденной покупке, включая ID и статус.
+        """
         success = ns.payload["success"]
         p = svc.confirm_purchase(purchase_id, success)
         return {"purchase_id": p.id, "status": p.status.value}

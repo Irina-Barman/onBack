@@ -1,15 +1,33 @@
 from decimal import ROUND_DOWN, Decimal
+from typing import Any
 
 from ..extensions import db
-from ..models import EquipmentInvestment, MiningEquipment, MiningProfitBatch, Transaction, TxStatus, TxType
+from ..models import (
+    EquipmentInvestment,
+    MiningEquipment,
+    MiningProfitBatch,
+    Transaction,
+    TxStatus,
+    TxType,
+)
 from ..models.ledger_entry import LedgerEntry, LedgerType
 from ..services import wallet_service as wsvc
 
 
-def record_mined(equipment_id: int, mined_usdt: Decimal, period_start, period_end):
+def record_mined(
+    equipment_id: int, mined_usdt: Decimal, period_start: Any, period_end: Any,
+) -> MiningProfitBatch:
     """
-    Админ фиксирует добычу за период – создаётся Batch; деньги
-    пока на счёте компании, распределим cron-ом.
+    Фиксирует добычу за период, создавая новый Batch.
+
+    Параметры:
+        equipment_id (int): Идентификатор оборудования.
+        mined_usdt (Decimal): Сумма добытого в USDT.
+        period_start (Any): Начало периода.
+        period_end (Any): Конец периода.
+
+    Return:
+        MiningProfitBatch: Созданный объект Batch.
     """
     eq = MiningEquipment.query.get(equipment_id)
     opex = (mined_usdt * (eq.opex_pct / 100)).quantize(Decimal("0.01"))
@@ -28,14 +46,27 @@ def record_mined(equipment_id: int, mined_usdt: Decimal, period_start, period_en
     return batch
 
 
-def distribute_batch(batch_id: int):
+def distribute_batch(batch_id: int) -> None:
+    """
+    Распределяет добычу среди инвесторов на основе их доли в общей чистой
+    инвестиции.
+
+    Параметры:
+        batch_id (int): Идентификатор батча для распределения.
+
+    Return:
+        None: Функция не Return значения. Все изменения сохраняются в базе
+        данных.
+    """
     batch = MiningProfitBatch.query.get(batch_id)
     eq_id = batch.equipment_id
     dist = batch.distributable
 
-    # суммарная net-инвестиция
+    # Суммарная net-инвестиция
     total_net = (
-        db.session.query(db.func.coalesce(db.func.sum(EquipmentInvestment.net_amount), 0))
+        db.session.query(
+            db.func.coalesce(db.func.sum(EquipmentInvestment.net_amount), 0),
+        )
         .filter_by(equipment_id=eq_id)
         .scalar()
     )
@@ -72,7 +103,7 @@ def distribute_batch(batch_id: int):
             ),
         )
 
-        # кладём на основной баланс (ERC) как депозит
+        # Кладём на основной баланс (ERC) как депозит
         wsvc.credit_to_balance(inv.user_id, "erc", payout)
 
     db.session.commit()

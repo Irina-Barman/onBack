@@ -5,6 +5,7 @@ REST-namespace /wallets
 
 import os
 from decimal import Decimal
+from typing import Any, Dict, List
 
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
@@ -71,11 +72,17 @@ _tx = ns.model(
     },
 )
 
-_check_in = ns.model("CheckWalletIn", {"wallet_address": fields.String(required=True)})
+_check_in = ns.model(
+    "CheckWalletIn",
+    {"wallet_address": fields.String(required=True)},
+)
 _check_out = ns.model("CheckWalletOut", {"status": fields.String})
 
 _ref_bal = ns.model("RefBalance", {"balance": fields.String})
-_ref_wd = ns.model("RefWithdrawIn", {"amount": fields.String(required=True, example="25.00")})
+_ref_wd = ns.model(
+    "RefWithdrawIn",
+    {"amount": fields.String(required=True, example="25.00")},
+)
 
 
 # ---------- /create_wallet ----------
@@ -84,7 +91,13 @@ class WalletCreate(Resource):
     @jwt_required()
     @ns.expect(_empty)
     @ns.marshal_with(_wallets)
-    def post(self):
+    def post(self) -> Dict[str, str]:
+        """
+        Создает новые кошельки для пользователя.
+
+        Return:
+            dict: Словарь с адресами созданных кошельков.
+        """
         user = User.query.get(get_jwt_identity())
         return svc.create_wallets(user)
 
@@ -95,7 +108,13 @@ class WalletGet(Resource):
     @jwt_required()
     @ns.expect(_empty)
     @ns.marshal_with(_wallets, skip_none=True)
-    def post(self):
+    def post(self) -> Dict[str, Any]:
+        """
+        Получает адреса кошельков пользователя.
+
+        Return:
+            dict: Словарь с адресами кошельков или None, если они отсутствуют.
+        """
         user = User.query.get(get_jwt_identity())
         res = svc.list_wallets(user)
         return res if res else {"wallet": None}
@@ -105,7 +124,13 @@ class WalletGet(Resource):
 @ns.route("/transfer_fee")
 class TransferFee(Resource):
     @ns.marshal_with(_fee)
-    def get(self):
+    def get(self) -> Dict[str, str]:
+        """
+        Получает информацию о комиссиях за переводы.
+
+        Return:
+            dict: Словарь с комиссиями для различных сетей.
+        """
         return {k: str(v) for k, v in svc.transfer_fee_table().items()}
 
 
@@ -115,7 +140,13 @@ class Withdraw(Resource):
     @jwt_required()
     @ns.expect(_withdraw_in)
     @ns.marshal_with(_withdraw_out, code=201)
-    def post(self):
+    def post(self) -> Dict[str, Any]:
+        """
+        Выводит средства с кошелька пользователя.
+
+        Return:
+            dict: Статус операции и ID транзакции.
+        """
         user = User.query.get(get_jwt_identity())
         data = ns.payload
         tx = svc.withdraw_funds(
@@ -134,7 +165,13 @@ class Balance(Resource):
     @jwt_required()
     @ns.expect(_empty)
     @ns.marshal_with(_balance_out)
-    def get(self):
+    def get(self) -> Dict[str, str]:
+        """
+        Получает баланс пользователя по всем сетям.
+
+        Return:
+            dict: Словарь с балансами для различных сетей.
+        """
         user = User.query.get(get_jwt_identity())
         bal = svc.user_balance_stub(user)
         return {k: str(v) for k, v in bal.items()}
@@ -146,7 +183,13 @@ class Transactions(Resource):
     @jwt_required()
     @ns.expect(_empty)
     @ns.marshal_list_with(_tx)
-    def get(self):
+    def get(self) -> List[Dict[str, Any]]:
+        """
+        Получает историю транзакций пользователя.
+
+        Return:
+            list: Список транзакций пользователя.
+        """
         user = User.query.get(get_jwt_identity())
         return svc.history(user)
 
@@ -156,7 +199,13 @@ class Transactions(Resource):
 class CheckWallet(Resource):
     @ns.expect(_check_in)
     @ns.marshal_with(_check_out)
-    def post(self):
+    def post(self) -> Dict[str, str]:
+        """
+        Проверяет безопасность кошелька.
+
+        Return:
+            dict: Статус проверки кошелька.
+        """
         return {"status": "safe"}
 
 
@@ -165,7 +214,13 @@ class CheckWallet(Resource):
 class RefBal(Resource):
     @jwt_required()
     @ns.marshal_with(_ref_bal)
-    def get(self):
+    def get(self) -> Dict[str, str]:
+        """
+        Получает баланс реферальной программы пользователя.
+
+        Return:
+            dict: Словарь с реферальным балансом.
+        """
         user = User.query.get(get_jwt_identity())
         return {"balance": str(svc.ref_balance(user))}
 
@@ -175,7 +230,13 @@ class RefBal(Resource):
 class RefWithdraw(Resource):
     @jwt_required()
     @ns.expect(_ref_wd)
-    def post(self):
+    def post(self) -> Dict[str, str]:
+        """
+        Выводит средства из реферального баланса пользователя.
+
+        Return:
+            dict: Статус операции.
+        """
         user = User.query.get(get_jwt_identity())
         amt = Decimal(ns.payload["amount"])
         if amt < Decimal(os.getenv("REF_MIN_PAYOUT", "10")):

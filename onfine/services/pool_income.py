@@ -19,11 +19,17 @@ from ..services.wallet_service import credit_to_balance
 OPEX_PCT = Decimal("0.07")
 
 
-def fetch_pool_income():
+def fetch_pool_income() -> None:
+    """
+    Получает доход от пула за сегодняшний день и распределяет его.
+
+    Вычисляет долю операционных расходов и распределяет доход между
+    текущими раундами финансирования.
+    """
     mined = get_today_income_usdt()  # Decimal
     opex = (mined * OPEX_PCT).quantize(Decimal("0.01"))
     dist = mined - opex
-    day = date.today()
+    day = date.today()  # noqa: DTZ011
     mining = FundingRound.query.filter_by(state=RoundState.MINING).all()
     tot_cap = sum(r.cap_usdt for r in mining)
     if tot_cap == 0:
@@ -41,20 +47,42 @@ def fetch_pool_income():
     db.session.commit()
 
 
-def distribute_round(round_id: int):
+def distribute_round(round_id: int) -> None:
+    """
+    Распределяет доходы среди инвесторов в указанном раунде.
+
+    :param round_id: Идентификатор раунда финансирования.
+    :raises ValueError: Если не удается найти раунд по указанному
+        идентификатору.
+    """
     r = FundingRound.query.get(round_id)
-    income = (
-        db.session.query(db.func.coalesce(db.func.sum(RoundIncome.distributable), 0))
+    if r is None:
+        raise ValueError(f"Funding round with ID {round_id} not found.")
+
+    income: Decimal = (
+        db.session.query(
+            db.func.coalesce(db.func.sum(RoundIncome.distributable), 0),
+        )
         .filter_by(round_id=round_id)
         .scalar()
     )
+
     if income == 0:
         return
-    tot_inv = db.session.query(db.func.sum(RoundInvestment.amount)).filter_by(round_id=round_id).scalar()
+
+    tot_inv: Decimal = (
+        db.session.query(db.func.sum(RoundInvestment.amount))
+        .filter_by(round_id=round_id)
+        .scalar()
+    )
+
     for inv in RoundInvestment.query.filter_by(round_id=round_id):
-        payout = (income * (inv.amount / tot_inv)).quantize(Decimal("0.01"), ROUND_DOWN)
+        payout: Decimal = (income * (inv.amount / tot_inv)).quantize(
+            Decimal("0.01"), ROUND_DOWN,
+        )
         if payout == 0:
             continue
+
         tx = Transaction(
             user_id=inv.user_id,
             type=TxType.profit,
@@ -76,5 +104,6 @@ def distribute_round(round_id: int):
             ),
         )
         credit_to_balance(inv.user_id, "erc", payout)
+
     db.session.query(RoundIncome).filter_by(round_id=round_id).delete()
     db.session.commit()

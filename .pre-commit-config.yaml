@@ -1,24 +1,24 @@
-#repos:
-#  - repo: https://github.com/psf/black
-#    rev: 24.8.0
-#    hooks:
-#      - id: black
-#        args: [ "--config", "pyproject.toml" ]
-#
-#  - repo: https://github.com/charliermarsh/ruff-pre-commit
-#    rev: v0.6.7
-#    hooks:
-#      - id: ruff
-#        args: [ "--config", "pyproject.toml" ]
-#
-#  - repo: https://github.com/pre-commit/pre-commit-hooks
-#    rev: v4.6.0
-#    hooks:
-#      - id: trailing-whitespace
-#        entry: trailing-whitespace-fixer
-#        language: python
-#        types: [ text ]
-#      - id: requirements-txt-fixer
-#      - id: check-merge-conflict
-#      - id: check-ast
-#      - id: check-json
+repos:
+ - repo: https://github.com/psf/black
+   rev: 24.8.0
+   hooks:
+     - id: black
+       args: [ "--config", "pyproject.toml" ]
+
+ - repo: https://github.com/charliermarsh/ruff-pre-commit
+   rev: v0.6.7
+   hooks:
+     - id: ruff
+       args: [ "--config", "pyproject.toml" ]
+
+ - repo: https://github.com/pre-commit/pre-commit-hooks
+   rev: v4.6.0
+   hooks:
+     - id: trailing-whitespace
+       entry: trailing-whitespace-fixer
+       language: python
+       types: [ text ]
+     - id: requirements-txt-fixer
+     - id: check-merge-conflict
+     - id: check-ast
+     - id: check-json

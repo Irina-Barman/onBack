@@ -7,7 +7,7 @@ BASE_V1 = "https://api.emcd.io/v1"
 
 
 class EMCDService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = os.getenv("EMCD_API_KEY")
         if not self.api_key:
             raise RuntimeError("EMCD_API_KEY is not set")

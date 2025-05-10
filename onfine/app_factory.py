@@ -5,7 +5,12 @@ from .config import Config
 from .extensions import db, jwt, migrate
 
 
-def create_app():
+def create_app() -> Flask:
+    """Создает и настраивает экземпляр Flask приложения.
+
+    Return:
+        Flask: Настроенный экземпляр приложения Flask.
+    """
     app = Flask(__name__)
     app.config.from_object(Config)
 

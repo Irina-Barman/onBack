@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 from flask_jwt_extended import jwt_required
 from flask_restx import Namespace, Resource, fields
 
@@ -10,7 +12,9 @@ svc = EMCDService()
 coin_info = ns.model(
     "CoinInfo",
     {
-        "address": fields.String(required=True, example="1TqVjEy5nA7tXEDCx4fHgxccxnoYj5RAtt"),
+        "address": fields.String(
+            required=True, example="1TqVjEy5nA7tXEDCx4fHgxccxnoYj5RAtt",
+        ),
         "coin_id": fields.String(required=True, example="btc"),
         "balance": fields.Float(required=True, example=0.01103015),
         "total_paid": fields.Float(required=True, example=0.85367081),
@@ -87,10 +91,15 @@ income_entry = ns.model(
     {
         "code": fields.Integer(required=True, example=1),
         "timestamp": fields.Integer(required=True, example=1569456000),
-        "gmt_time": fields.String(required=True, example="26-09-2019 00:00:00"),
+        "gmt_time": fields.String(
+            required=True, example="26-09-2019 00:00:00",
+        ),
         "income": fields.Float(required=True, example=0.00830608),
         "type": fields.String(required=True, example="mining"),
-        "total_hashrate": fields.Integer(required=True, example=390089214794186),
+        "total_hashrate": fields.Integer(
+            required=True,
+            example=390089214794186,
+        ),
     },
 )
 income_info = ns.model(
@@ -104,7 +113,9 @@ payout_entry = ns.model(
     "PayoutEntry",
     {
         "timestamp": fields.Integer(required=True, example=1569389401),
-        "gmt_time": fields.String(required=True, example="25-09-2019 05:30:01"),
+        "gmt_time": fields.String(
+            required=True, example="25-09-2019 05:30:01",
+        ),
         "amount": fields.Float(required=True, example=0.0166448),
         "txid": fields.String(required=True, example="13849427081db061..."),
     },
@@ -122,7 +133,12 @@ payouts_info = ns.model(
 class Info(Resource):
     @jwt_required()
     @ns.marshal_with(account_info)
-    def get(self):
+    def get(self) -> Dict[str, Any]:
+        """Получает информацию об аккаунте.
+
+        Return:
+            dict: Информация об аккаунте пользователя.
+        """
         return svc.get_account_info()
 
 
@@ -130,7 +146,15 @@ class Info(Resource):
 class Workers(Resource):
     @jwt_required()
     @ns.marshal_with(workers_info)
-    def get(self, coin):
+    def get(self, coin: str) -> Dict[str, Any]:
+        """Получает информацию о работниках для указанной крипты.
+
+        Аргументы:
+            coin (str): Идентификатор крипты.
+
+        Return:
+            dict: Информация о работниках для указанной крипты.
+        """
         return svc.get_workers(coin)
 
 
@@ -138,7 +162,15 @@ class Workers(Resource):
 class Income(Resource):
     @jwt_required()
     @ns.marshal_with(income_info)
-    def get(self, coin):
+    def get(self, coin: str) -> Dict[str, Any]:
+        """Получает информацию о доходах для указанной крипты.
+
+        Аргументы:
+            coin (str): Идентификатор крипты.
+
+        Return:
+            dict: Информация о доходах для указанной крипты.
+        """
         return svc.get_income(coin)
 
 
@@ -146,5 +178,13 @@ class Income(Resource):
 class Payouts(Resource):
     @jwt_required()
     @ns.marshal_with(payouts_info)
-    def get(self, coin):
+    def get(self, coin: str) -> Dict[str, Any]:
+        """Получает информацию о выплатах для указанной крипты.
+
+        Аргументы:
+            coin (str): Идентификатор крипты.
+
+        Return:
+            dict: Информация о выплатах для указанной крипты.
+        """
         return svc.get_payouts(coin)

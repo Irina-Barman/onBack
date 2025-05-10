@@ -6,7 +6,15 @@ celery = flask_app.celery
 
 # -------- ЗАДАЧИ ---------- #
 @celery.task(name="tasks.distribute_profit")
-def distribute_profit(pool_income, pool_expenses):
+def distribute_profit(pool_income: float, pool_expenses: float) -> None:
+    """
+    Считает чистую прибыль пула, удерживает комиссию платформы
+    и создаёт бухгалтерские проводки.
+
+    Args:
+        pool_income (float): Доход пула.
+        pool_expenses (float): Расходы пула.
+    """
     """
     Считает чистую прибыль пула, удерживает комиссию платформы
     и создаёт бухгалтерские проводки.
@@ -17,8 +25,12 @@ def distribute_profit(pool_income, pool_expenses):
     from .models.referral import create_referral_operations
     from .models.transactions import Transaction
 
-    platform_fee = (Decimal(pool_income) - Decimal(pool_expenses)) * flask_app.config["PLATFORM_FEE_PERCENT"]
-    distributable = Decimal(pool_income) - Decimal(pool_expenses) - platform_fee
+    platform_fee = (
+        Decimal(pool_income) - Decimal(pool_expenses)
+    ) * flask_app.config["PLATFORM_FEE_PERCENT"]
+    distributable = (
+        Decimal(pool_income) - Decimal(pool_expenses) - platform_fee
+    )
 
     # пример проводки
     tx = Transaction(
