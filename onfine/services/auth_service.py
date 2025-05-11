@@ -142,7 +142,8 @@ class AuthService:
         t = Token.query.filter_by(
             token=token, purpose="reset_pwd", used=False
         ).first()
-        if not t or t.expires_at < db.func.now():
+
+        if t is None or t.expires_at < datetime.utcnow():  # noqa: DTZ003
             raise ValueError("Invalid or expired token.")
 
         user = User.query.get(t.user_id)
