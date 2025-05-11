@@ -1,4 +1,3 @@
-import re
 from typing import Any, Dict, Tuple
 
 from flask import request
@@ -32,12 +31,10 @@ register_out = auth_ns.model(
 )
 
 confirm_in = auth_ns.model(
-    "ConfirmEmailIn",
-    {"token": fields.String(required=True)},
+    "ConfirmEmailIn", {"token": fields.String(required=True)}
 )
 login_in = auth_ns.model(
-    "LoginIn",
-    {"email": fields.String, "password": fields.String},
+    "LoginIn", {"email": fields.String, "password": fields.String}
 )
 login_out = auth_ns.model(
     "LoginOut",
@@ -88,22 +85,6 @@ class Register(Resource):
         partner_uid = data.get("partner_uid") or request.args.get(
             "partner_uid"
         )
-
-        # Проверка корректности email
-        if not self.is_valid_email(data.get("email", "")):
-            return {"error": "Некорректный email."}, 400
-
-        # Проверка сложности пароля
-        password_check = self.is_strong_password(data.get("password", ""))
-        if password_check is not True:
-            return {"error": password_check}, 400
-
-        # Проверка на существование пользователя с таким email
-        if AuthService.user_exists(data["email"]):
-            return {
-                "error": "Пользователь с таким email уже зарегистрирован."
-            }, 400
-
         try:
             user = AuthService.register_user(
                 email=data["email"],
@@ -111,31 +92,11 @@ class Register(Resource):
                 partner_uid=partner_uid,
             )
             return {
-                "message": "Регистрация успешна. Пожалуйста, подтвердите ваш email.",
+                "message": "Registration successful. Please confirm your e-mail.",
                 "user_id": user.id,
             }, 200
         except ValueError as e:
             return {"error": str(e)}, 400
-
-    def is_valid_email(self, email: str) -> bool:
-        """
-        Проверка корректности email.
-        """
-        email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        return re.match(email_regex, email) is not None
-
-    def is_strong_password(self, password: str) -> Any:
-        """
-        Проверка сложности пароля.
-        Возвращает True, если пароль сильный, или сообщение об ошибке, если нет.
-        """
-        if len(password) < 8:
-            return "Пароль должен содержать минимум 8 символов."
-        if not any(c.isdigit() for c in password):
-            return "Пароль должен содержать хотя бы одну цифру."
-        if not any(c.isalpha() for c in password):
-            return "Пароль должен содержать хотя бы одну букву."
-        return True
 
 
 # ----------- /confirm-email ----------
@@ -234,8 +195,7 @@ class ResetPassword(Resource):
         data = request.json
         try:
             return AuthService.reset_password(
-                data["token"],
-                data["newPassword"],
+                data["token"], data["newPassword"]
             )
         except ValueError as e:
             return {"error": str(e)}, 400

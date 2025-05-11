@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from flask_jwt_extended import create_access_token
@@ -48,6 +48,7 @@ class AuthService:
 
     # ----------------- CONFIRM EMAIL -----------------
     @staticmethod
+    @staticmethod
     def confirm_email(token_str: str) -> None:
         """
         Подтверждение адреса электронной почты пользователя.
@@ -60,7 +61,9 @@ class AuthService:
             purpose="confirm_email",
             used=False,
         ).first()
-        if not token or token.expires_at < db.func.now():
+
+        # Проверяем, существует ли токен и не истек ли он
+        if token is None or token.expires_at < datetime.utcnow():  # noqa: DTZ003
             raise ValueError("Invalid or expired token.")
 
         user = User.query.get(token.user_id)
@@ -143,13 +146,3 @@ class AuthService:
         t.used = True
         db.session.commit()
         return {"message": "Password changed successfully."}
-
-    @staticmethod
-    def user_exists(email: str) -> bool:
-        """
-        Проверяет, существует ли пользователь с данным email.
-
-        :param email: Адрес электронной почты пользователя.
-        :return: True, если пользователь существует, иначе False.
-        """
-        return User.query.filter_by(email=email).first() is not None
