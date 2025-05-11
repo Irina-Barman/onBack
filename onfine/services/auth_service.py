@@ -93,12 +93,16 @@ class AuthService:
             identity=user.id,
             expires_delta=timedelta(days=7),  # «длинный» токен на неделю
         )
+        # Вычисляем срок действия токена
+
+        expire_timestamp = int(
+            (datetime.utcnow() + timedelta(days=7)).timestamp(),  # noqa: DTZ003
+        )
+
         return {
             "accessToken": access_token,
             "tokenType": "Bearer",
-            "expireTimestamp": (
-                db.func.extract("epoch", db.func.now()) + 60 * 60 * 24 * 7
-            ),
+            "expireTimestamp": expire_timestamp,
         }
 
     # ----------------- FORGOT PASSWORD -----------------
