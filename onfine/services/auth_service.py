@@ -143,3 +143,13 @@ class AuthService:
         t.used = True
         db.session.commit()
         return {"message": "Password changed successfully."}
+
+    @staticmethod
+    def user_exists(email: str) -> bool:
+        """
+        Проверяет, существует ли пользователь с данным email.
+
+        :param email: Адрес электронной почты пользователя.
+        :return: True, если пользователь существует, иначе False.
+        """
+        return User.query.filter_by(email=email).first() is not None
