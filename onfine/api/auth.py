@@ -7,15 +7,26 @@ from flask_restx import Namespace, Resource, fields
 from onfine.models.user import User
 from onfine.services.auth_service import AuthService
 
+from ..api.error_handlers import (
+    EmailConfirmationError,
+    PasswordResetError,
+    RegistrationError,
+    register_error_handlers,
+)
 from ..api.validators import validate_email, validate_password
 
 auth_ns = Namespace(
-    "auth", description="Регистрация • логин • восстановление пароля",
+    "auth",
+    description="Регистрация • логин • восстановление пароля",
 )
 
-# ----------- Swagger-модели ----------
-err_model = auth_ns.model("Error", {"error": fields.String})
+register_error_handlers(auth_ns)
 
+# ----------- Swagger-модели ----------
+# Модель ошибки
+err_model = auth_ns.model(
+    "Error", {"error": fields.String(description="Error message")}
+)
 register_in = auth_ns.model(
     "RegisterIn",
     {
@@ -33,10 +44,12 @@ register_out = auth_ns.model(
 )
 
 confirm_in = auth_ns.model(
-    "ConfirmEmailIn", {"token": fields.String(required=True)},
+    "ConfirmEmailIn",
+    {"token": fields.String(required=True)},
 )
 login_in = auth_ns.model(
-    "LoginIn", {"email": fields.String, "password": fields.String},
+    "LoginIn",
+    {"email": fields.String, "password": fields.String},
 )
 login_out = auth_ns.model(
     "LoginOut",
@@ -87,22 +100,23 @@ class Register(Resource):
         email = data.get("email")
         password = data.get("password")
         partner_uid = data.get("partner_uid") or request.args.get(
-            "partner_uid"
+            "partner_uid",
         )
+
         try:
             validate_email(email)
             validate_password(password)
             user = AuthService.register_user(
-                email=data["email"],
-                password=data["password"],
+                email=email,
+                password=password,
                 partner_uid=partner_uid,
             )
             return {
-                "message": "Registration successful. Please confirm your e-mail.",  # noqa: E501
+                "message": "Registration successful. Please confirm your e-mail.",
                 "user_id": user.id,
             }, 200
         except ValueError as e:
-            return {"error": str(e)}, 400
+            raise RegistrationError(str(e))
 
 
 # ----------- /confirm-email ----------
@@ -116,19 +130,18 @@ class ConfirmEmail(Resource):
         Подтверждение email-адреса пользователя.
 
         Ожидает JSON-данные с полем 'token', который используется для
-        подтверждения email-адреса. Если токен действителен, Return
+        подтверждения email-адреса. Если токен действителен, возвращает
         сообщение об успешном подтверждении.
-
-        Return:
-            Dict[str, Any]: Сообщение об успешном подтверждении email
-            или ошибку валидации.
         """
-        data = request.json
+        data = request.json or {}
+        token = data.get("token")
+        if not token:
+            raise EmailConfirmationError("Token is required.")
         try:
-            AuthService.confirm_email(data["token"])
+            AuthService.confirm_email(token)
             return {"message": "Email confirmed."}
         except ValueError as e:
-            return {"error": str(e)}, 400
+            raise EmailConfirmationError(str(e))
 
 
 # ----------- /login ----------
@@ -150,10 +163,7 @@ class Login(Resource):
             сообщение об ошибке при неверных учетных данных.
         """
         data = request.json
-        try:
-            return AuthService.login_user(data["email"], data["password"])
-        except ValueError as e:
-            return {"error": str(e)}, 400
+        return AuthService.login_user(data["email"], data["password"])
 
 
 # ----------- /forgot-password ----------
@@ -174,11 +184,8 @@ class ForgotPassword(Resource):
             или сообщение об ошибке, если email не найден.
         """
         data = request.json
-        try:
-            AuthService.forgot_password(data["email"])
-            return {"message": "Reset e-mail sent."}
-        except ValueError as e:
-            return {"error": str(e)}, 400
+        AuthService.forgot_password(data["email"])
+        return {"message": "Reset e-mail sent."}
 
 
 # ----------- /reset-password ----------
@@ -202,10 +209,11 @@ class ResetPassword(Resource):
         try:
             validate_password(data["newPassword"])
             return AuthService.reset_password(
-                data["token"], data["newPassword"],
+                data["token"],
+                data["newPassword"],
             )
         except ValueError as e:
-            return {"error": str(e)}, 400
+            raise PasswordResetError(str(e))
 
 
 # ----------- /logout ----------
