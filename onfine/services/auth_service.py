@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional
 
 from flask_jwt_extended import create_access_token
 
+from ..api.validators import validate_email, validate_password
 from ..extensions import db
 from ..models.token_store import Token
 from ..models.user import User
@@ -25,6 +26,11 @@ class AuthService:
         :raises ValueError: Если адрес электронной почты уже зарегистрирован.
         :return: Зарегистрированный пользователь.
         """
+        # Валидация email
+        validate_email(email)
+        # Валидация пароля
+        validate_password(password)
+
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
 
@@ -139,13 +145,15 @@ class AuthService:
         :return: Словарь с сообщением об успешном изменении пароля.
         """
         t = Token.query.filter_by(
-            token=token, purpose="reset_pwd", used=False
+            token=token, purpose="reset_pwd", used=False,
         ).first()
 
         if t is None or t.expires_at < datetime.utcnow():  # noqa: DTZ003
             raise ValueError("Invalid or expired token.")
 
         user = User.query.get(t.user_id)
+        # Валидация нового пароля
+        validate_password(new_password)
         user.set_password(new_password)
         t.used = True
         db.session.commit()

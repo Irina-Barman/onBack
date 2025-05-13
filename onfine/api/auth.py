@@ -7,8 +7,10 @@ from flask_restx import Namespace, Resource, fields
 from onfine.models.user import User
 from onfine.services.auth_service import AuthService
 
+from ..api.validators import validate_email, validate_password
+
 auth_ns = Namespace(
-    "auth", description="Регистрация • логин • восстановление пароля"
+    "auth", description="Регистрация • логин • восстановление пароля",
 )
 
 # ----------- Swagger-модели ----------
@@ -31,10 +33,10 @@ register_out = auth_ns.model(
 )
 
 confirm_in = auth_ns.model(
-    "ConfirmEmailIn", {"token": fields.String(required=True)}
+    "ConfirmEmailIn", {"token": fields.String(required=True)},
 )
 login_in = auth_ns.model(
-    "LoginIn", {"email": fields.String, "password": fields.String}
+    "LoginIn", {"email": fields.String, "password": fields.String},
 )
 login_out = auth_ns.model(
     "LoginOut",
@@ -82,17 +84,21 @@ class Register(Resource):
             идентификатор пользователя или ошибку валидации.
         """
         data = request.json or {}
+        email = data.get("email")
+        password = data.get("password")
         partner_uid = data.get("partner_uid") or request.args.get(
             "partner_uid"
         )
         try:
+            validate_email(email)
+            validate_password(password)
             user = AuthService.register_user(
                 email=data["email"],
                 password=data["password"],
                 partner_uid=partner_uid,
             )
             return {
-                "message": "Registration successful. Please confirm your e-mail.",
+                "message": "Registration successful. Please confirm your e-mail.",  # noqa: E501
                 "user_id": user.id,
             }, 200
         except ValueError as e:
@@ -194,8 +200,9 @@ class ResetPassword(Resource):
         """
         data = request.json
         try:
+            validate_password(data["newPassword"])
             return AuthService.reset_password(
-                data["token"], data["newPassword"]
+                data["token"], data["newPassword"],
             )
         except ValueError as e:
             return {"error": str(e)}, 400
