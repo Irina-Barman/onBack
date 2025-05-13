@@ -48,7 +48,6 @@ class AuthService:
 
     # ----------------- CONFIRM EMAIL -----------------
     @staticmethod
-    @staticmethod
     def confirm_email(token_str: str) -> None:
         """
         Подтверждение адреса электронной почты пользователя.
