@@ -240,7 +240,7 @@ class Logout(Resource):
             сообщение об ошибке, если токен отсутствует.
         """
         if not request.headers.get("Authorization"):
-            return {"error": "Token is missing."}, 400
+            return {"error": "Token is missing."}
         return {"message": "Successfully logged out."}
 
 

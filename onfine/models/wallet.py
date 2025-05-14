@@ -29,7 +29,9 @@ class Wallet(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(
-        db.BigInteger, db.ForeignKey("users.id"), nullable=False,
+        db.BigInteger,
+        db.ForeignKey("users.id"),
+        nullable=False,
     )
     network = db.Column(db.String(8), nullable=False)  # bep | erc | trc
     address = db.Column(db.String(128), nullable=False, unique=True)

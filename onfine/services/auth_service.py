@@ -150,7 +150,9 @@ class AuthService:
         :return: Словарь с сообщением об успешном изменении пароля.
         """
         t = Token.query.filter_by(
-            token=token, purpose="reset_pwd", used=False,
+            token=token,
+            purpose="reset_pwd",
+            used=False,
         ).first()
 
         if t is None or t.expires_at < datetime.utcnow():  # noqa: DTZ003
