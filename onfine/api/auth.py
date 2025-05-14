@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -25,8 +25,13 @@ register_error_handlers(auth_ns)
 # ----------- Swagger-модели ----------
 # Модель ошибки
 err_model = auth_ns.model(
-    "Error", {"error": fields.String(description="Error message")}
+    "Error",
+    {
+        "error": fields.String(description="Error code"),
+        "message": fields.String(description="Error message"),
+    },
 )
+
 register_in = auth_ns.model(
     "RegisterIn",
     {
@@ -96,10 +101,12 @@ class Register(Resource):
             Tuple[Dict[str, Any], int]: Сообщение об успешной регистрации и
             идентификатор пользователя или ошибку валидации.
         """
-        data = request.json or {}
-        email = data.get("email")
-        password = data.get("password")
-        partner_uid = data.get("partner_uid") or request.args.get(
+        data: Dict[str, Any] = request.json or {}
+        email: Optional[str] = data.get("email")
+        password: Optional[str] = data.get("password")
+        partner_uid: Optional[str] = data.get(
+            "partner_uid"
+        ) or request.args.get(
             "partner_uid",
         )
 
@@ -133,8 +140,8 @@ class ConfirmEmail(Resource):
         подтверждения email-адреса. Если токен действителен, возвращает
         сообщение об успешном подтверждении.
         """
-        data = request.json or {}
-        token = data.get("token")
+        data: Dict[str, Any] = request.json or {}
+        token: Optional[str] = data.get("token")
         if not token:
             raise EmailConfirmationError("Token is required.")
         try:
@@ -162,7 +169,7 @@ class Login(Resource):
             Dict[str, Any]: Данные пользователя и токен доступа или
             сообщение об ошибке при неверных учетных данных.
         """
-        data = request.json
+        data: Dict[str, Any] = request.json
         return AuthService.login_user(data["email"], data["password"])
 
 
@@ -183,7 +190,7 @@ class ForgotPassword(Resource):
             Dict[str, Any]: Сообщение об успешной отправке письма
             или сообщение об ошибке, если email не найден.
         """
-        data = request.json
+        data: Dict[str, Any] = request.json
         AuthService.forgot_password(data["email"])
         return {"message": "Reset e-mail sent."}
 
@@ -205,7 +212,7 @@ class ResetPassword(Resource):
             Dict[str, Any]: Сообщение об успешном сбросе пароля или
             сообщение об ошибке при неверном токене.
         """
-        data = request.json
+        data: Dict[str, Any] = request.json
         try:
             validate_password(data["newPassword"])
             return AuthService.reset_password(

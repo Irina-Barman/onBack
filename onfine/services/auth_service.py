@@ -33,6 +33,8 @@ class AuthService:
 
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
+        if not email or not password:
+            raise ValueError("Email and password are required.")
 
         user = User(email=email, partner_uid=partner_uid)
         user.set_password(password)
@@ -91,8 +93,9 @@ class AuthService:
         user: User = User.query.filter_by(email=email).first()
         if not user or not user.check_password(password):
             raise ValueError("Invalid credentials.")
-        if not user.email_confirmed:
-            raise ValueError("Email not confirmed.")
+
+        if not email or not password:
+            raise ValueError("Email and password are required.")
 
         access_token = create_access_token(
             identity=str(user.id),
@@ -122,6 +125,8 @@ class AuthService:
         user: User = User.query.filter_by(email=email).first()
         if not user:
             raise ValueError("Email not found.")
+        if not email:
+            raise ValueError("Email is required.")
 
         token = Token.create(
             user.id,
@@ -152,7 +157,11 @@ class AuthService:
             raise ValueError("Invalid or expired token.")
 
         user = User.query.get(t.user_id)
-        # Валидация нового пароля
+        if not user:
+            raise ValueError("User not found.")
+        if not token or not new_password:
+            raise ValueError("Token and new password are required.")
+
         validate_password(new_password)
         user.set_password(new_password)
         t.used = True

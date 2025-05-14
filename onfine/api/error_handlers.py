@@ -17,7 +17,6 @@ class PasswordResetError(Exception):
         self.message: str = message
 
 
-# Обработчики ошибок
 def register_error_handlers(api_namespace: Namespace) -> None:
     """
     Регистрирует обработчики пользовательских исключений в заданном
@@ -38,22 +37,21 @@ def register_error_handlers(api_namespace: Namespace) -> None:
     @api_namespace.errorhandler(RegistrationError)
     def handle_registration_error(
         error: RegistrationError,
-    ) -> tuple[dict[str, str], int]:
-        return {"error": error.message}, 400
+    ) -> tuple[dict, int]:
+        return {"error": "ValueError", "message": error.message}, 400
 
     @api_namespace.errorhandler(EmailConfirmationError)
     def handle_email_confirmation_error(
         error: EmailConfirmationError,
-    ) -> tuple[dict[str, str], int]:
-        return {"error": error.message}, 400
+    ) -> tuple[dict, int]:
+        return {"error": "ValueError", "message": error.message}, 400
 
     @api_namespace.errorhandler(PasswordResetError)
     def handle_password_reset_error(
         error: PasswordResetError,
-    ) -> tuple[dict[str, str], int]:
-        return {"error": error.message}, 400
+    ) -> tuple[dict, int]:
+        return {"error": "ValueError", "message": error.message}, 400
 
-    # Глобальный обработчик для ValueError
     @api_namespace.errorhandler(ValueError)
-    def handle_value_error(error: ValueError) -> tuple[dict[str, str], int]:
-        return {"error": str(error)}, 400
+    def handle_value_error(error: ValueError) -> tuple[dict, int]:
+        return {"error": "ValueError", "message": str(error)}, 400
