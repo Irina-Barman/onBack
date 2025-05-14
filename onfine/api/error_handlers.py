@@ -38,20 +38,20 @@ def register_error_handlers(api_namespace: Namespace) -> None:
     def handle_registration_error(
         error: RegistrationError,
     ) -> tuple[dict, int]:
-        return {"error": "ValueError", "message": error.message}, 400
+        return {"error": "400 Bad Request", "message": error.message}, 400
 
     @api_namespace.errorhandler(EmailConfirmationError)
     def handle_email_confirmation_error(
         error: EmailConfirmationError,
     ) -> tuple[dict, int]:
-        return {"error": "ValueError", "message": error.message}, 400
+        return {"error": "400 Bad Request", "message": error.message}, 400
 
     @api_namespace.errorhandler(PasswordResetError)
     def handle_password_reset_error(
         error: PasswordResetError,
     ) -> tuple[dict, int]:
-        return {"error": "ValueError", "message": error.message}, 400
+        return {"error": "400 Bad Request", "message": error.message}, 400
 
     @api_namespace.errorhandler(ValueError)
     def handle_value_error(error: ValueError) -> tuple[dict, int]:
-        return {"error": "ValueError", "message": str(error)}, 400
+        return {"error": "400 Bad Request", "message": str(error)}, 400
