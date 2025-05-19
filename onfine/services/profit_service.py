@@ -15,7 +15,10 @@ from ..services import wallet_service as wsvc
 
 
 def record_mined(
-    equipment_id: int, mined_usdt: Decimal, period_start: Any, period_end: Any,
+    equipment_id: int,
+    mined_usdt: Decimal,
+    period_start: Any,
+    period_end: Any,
 ) -> MiningProfitBatch:
     """
     Фиксирует добычу за период, создавая новый Batch.

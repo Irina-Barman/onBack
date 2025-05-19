@@ -32,6 +32,8 @@ class User(db.Model):
     )
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Обратная связь!! Без неё логает
+    purchases = db.relationship("Purchase", back_populates="user")
 
     # helpers -------------------------------------------------
     def set_password(self, raw: str) -> None:

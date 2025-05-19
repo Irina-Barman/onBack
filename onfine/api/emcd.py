@@ -13,7 +13,8 @@ coin_info = ns.model(
     "CoinInfo",
     {
         "address": fields.String(
-            required=True, example="1TqVjEy5nA7tXEDCx4fHgxccxnoYj5RAtt",
+            required=True,
+            example="1TqVjEy5nA7tXEDCx4fHgxccxnoYj5RAtt",
         ),
         "coin_id": fields.String(required=True, example="btc"),
         "balance": fields.Float(required=True, example=0.01103015),
@@ -92,7 +93,8 @@ income_entry = ns.model(
         "code": fields.Integer(required=True, example=1),
         "timestamp": fields.Integer(required=True, example=1569456000),
         "gmt_time": fields.String(
-            required=True, example="26-09-2019 00:00:00",
+            required=True,
+            example="26-09-2019 00:00:00",
         ),
         "income": fields.Float(required=True, example=0.00830608),
         "type": fields.String(required=True, example="mining"),
@@ -114,7 +116,8 @@ payout_entry = ns.model(
     {
         "timestamp": fields.Integer(required=True, example=1569389401),
         "gmt_time": fields.String(
-            required=True, example="25-09-2019 05:30:01",
+            required=True,
+            example="25-09-2019 05:30:01",
         ),
         "amount": fields.Float(required=True, example=0.0166448),
         "txid": fields.String(required=True, example="13849427081db061..."),

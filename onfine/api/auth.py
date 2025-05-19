@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
@@ -7,12 +7,30 @@ from flask_restx import Namespace, Resource, fields
 from onfine.models.user import User
 from onfine.services.auth_service import AuthService
 
+from ..api.error_handlers import (
+    EmailConfirmationError,
+    PasswordResetError,
+    RegistrationError,
+    register_error_handlers,
+)
+from ..api.validators import validate_email, validate_password
+
 auth_ns = Namespace(
-    "auth", description="Регистрация • логин • восстановление пароля"
+    "auth",
+    description="Регистрация • логин • восстановление пароля",
 )
 
+register_error_handlers(auth_ns)
+
 # ----------- Swagger-модели ----------
-err_model = auth_ns.model("Error", {"error": fields.String})
+# Модель ошибки
+err_model = auth_ns.model(
+    "Error",
+    {
+        "error": fields.String(description="Error code"),
+        "message": fields.String(description="Error message"),
+    },
+)
 
 register_in = auth_ns.model(
     "RegisterIn",
@@ -31,10 +49,12 @@ register_out = auth_ns.model(
 )
 
 confirm_in = auth_ns.model(
-    "ConfirmEmailIn", {"token": fields.String(required=True)},
+    "ConfirmEmailIn",
+    {"token": fields.String(required=True)},
 )
 login_in = auth_ns.model(
-    "LoginIn", {"email": fields.String, "password": fields.String},
+    "LoginIn",
+    {"email": fields.String, "password": fields.String},
 )
 login_out = auth_ns.model(
     "LoginOut",
@@ -81,24 +101,29 @@ class Register(Resource):
             Tuple[Dict[str, Any], int]: Сообщение об успешной регистрации и
             идентификатор пользователя или ошибку валидации.
         """
-        data = request.json or {}
-        partner_uid = data.get("partner_uid") or request.args.get(
+        data: Dict[str, Any] = request.json or {}
+        email: Optional[str] = data.get("email")
+        password: Optional[str] = data.get("password")
+        partner_uid: Optional[str] = data.get(
+            "partner_uid"
+        ) or request.args.get(
             "partner_uid",
         )
+
         try:
+            validate_email(email)
+            validate_password(password)
             user = AuthService.register_user(
-                email=data["email"],
-                password=data["password"],
+                email=email,
+                password=password,
                 partner_uid=partner_uid,
             )
             return {
-                "message": (
-                    "Registration successful. Please confirm your e-mail."
-                ),
+                "message": "Registration successful. Please confirm your e-mail.",
                 "user_id": user.id,
             }, 200
         except ValueError as e:
-            return {"error": str(e)}, 400
+            raise RegistrationError(str(e))
 
 
 # ----------- /confirm-email ----------
@@ -112,19 +137,18 @@ class ConfirmEmail(Resource):
         Подтверждение email-адреса пользователя.
 
         Ожидает JSON-данные с полем 'token', который используется для
-        подтверждения email-адреса. Если токен действителен, Return
+        подтверждения email-адреса. Если токен действителен, возвращает
         сообщение об успешном подтверждении.
-
-        Return:
-            Dict[str, Any]: Сообщение об успешном подтверждении email
-            или ошибку валидации.
         """
-        data = request.json
+        data: Dict[str, Any] = request.json or {}
+        token: Optional[str] = data.get("token")
+        if not token:
+            raise EmailConfirmationError("Token is required.")
         try:
-            AuthService.confirm_email(data["token"])
+            AuthService.confirm_email(token)
             return {"message": "Email confirmed."}
         except ValueError as e:
-            return {"error": str(e)}, 400
+            raise EmailConfirmationError(str(e))
 
 
 # ----------- /login ----------
@@ -145,11 +169,8 @@ class Login(Resource):
             Dict[str, Any]: Данные пользователя и токен доступа или
             сообщение об ошибке при неверных учетных данных.
         """
-        data = request.json
-        try:
-            return AuthService.login_user(data["email"], data["password"])
-        except ValueError as e:
-            return {"error": str(e)}, 400
+        data: Dict[str, Any] = request.json
+        return AuthService.login_user(data["email"], data["password"])
 
 
 # ----------- /forgot-password ----------
@@ -169,12 +190,9 @@ class ForgotPassword(Resource):
             Dict[str, Any]: Сообщение об успешной отправке письма
             или сообщение об ошибке, если email не найден.
         """
-        data = request.json
-        try:
-            AuthService.forgot_password(data["email"])
-            return {"message": "Reset e-mail sent."}
-        except ValueError as e:
-            return {"error": str(e)}, 400
+        data: Dict[str, Any] = request.json
+        AuthService.forgot_password(data["email"])
+        return {"message": "Reset e-mail sent."}
 
 
 # ----------- /reset-password ----------
@@ -194,14 +212,15 @@ class ResetPassword(Resource):
             Dict[str, Any]: Сообщение об успешном сбросе пароля или
             сообщение об ошибке при неверном токене.
         """
-        data = request.json
+        data: Dict[str, Any] = request.json
         try:
+            validate_password(data["newPassword"])
             return AuthService.reset_password(
                 data["token"],
                 data["newPassword"],
             )
         except ValueError as e:
-            return {"error": str(e)}, 400
+            raise PasswordResetError(str(e))
 
 
 # ----------- /logout ----------
@@ -221,7 +240,7 @@ class Logout(Resource):
             сообщение об ошибке, если токен отсутствует.
         """
         if not request.headers.get("Authorization"):
-            return {"error": "Token is missing."}, 400
+            return {"error": "Token is missing."}
         return {"message": "Successfully logged out."}
 
 

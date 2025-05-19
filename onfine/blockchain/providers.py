@@ -6,7 +6,8 @@ from typing import List, Tuple
 from cryptography.fernet import Fernet
 from tronpy import Tron
 from tronpy.keys import PrivateKey
-from web3 import Contract, Web3
+from web3 import Web3
+from web3.contract import Contract
 
 FERNET = Fernet(os.getenv("FERNET_KEY").encode())
 

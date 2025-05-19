@@ -1,12 +1,15 @@
-from datetime import timedelta
+import os
+from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from flask_jwt_extended import create_access_token
+from dotenv import load_dotenv
 
 from ..extensions import db
 from ..models.token_store import Token
 from ..models.user import User
 from ..utils.mailer import send_email
+
+load_dotenv()
 
 
 class AuthService:
@@ -25,8 +28,11 @@ class AuthService:
         :raises ValueError: Если адрес электронной почты уже зарегистрирован.
         :return: Зарегистрированный пользователь.
         """
+
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
+        if not email or not password:
+            raise ValueError("Email and password are required.")
 
         user = User(email=email, partner_uid=partner_uid)
         user.set_password(password)
@@ -60,7 +66,9 @@ class AuthService:
             purpose="confirm_email",
             used=False,
         ).first()
-        if not token or token.expires_at < db.func.now():
+
+        # Проверяем, существует ли токен и не истек ли он
+        if token is None or token.expires_at < datetime.utcnow():  # noqa: DTZ003
             raise ValueError("Invalid or expired token.")
 
         user = User.query.get(token.user_id)
@@ -83,19 +91,20 @@ class AuthService:
         user: User = User.query.filter_by(email=email).first()
         if not user or not user.check_password(password):
             raise ValueError("Invalid credentials.")
-        if not user.email_confirmed:
-            raise ValueError("Email not confirmed.")
 
-        access_token = create_access_token(
-            identity=user.id,
-            expires_delta=timedelta(days=7),  # «длинный» токен на неделю
+        if not email or not password:
+            raise ValueError("Email and password are required.")
+
+        access_token = os.getenv("JWT_ACCESS_TOKEN_EXPIRES")
+
+        expire_timestamp = int(
+            (datetime.utcnow() + timedelta(days=7)).timestamp(),  # noqa: DTZ003
         )
+
         return {
             "accessToken": access_token,
             "tokenType": "Bearer",
-            "expireTimestamp": (
-                db.func.extract("epoch", db.func.now()) + 60 * 60 * 24 * 7
-            ),
+            "expireTimestamp": expire_timestamp,
         }
 
     # ----------------- FORGOT PASSWORD -----------------
@@ -110,6 +119,8 @@ class AuthService:
         user: User = User.query.filter_by(email=email).first()
         if not user:
             raise ValueError("Email not found.")
+        if not email:
+            raise ValueError("Email is required.")
 
         token = Token.create(
             user.id,
@@ -133,12 +144,20 @@ class AuthService:
         :return: Словарь с сообщением об успешном изменении пароля.
         """
         t = Token.query.filter_by(
-            token=token, purpose="reset_pwd", used=False
+            token=token,
+            purpose="reset_pwd",
+            used=False,
         ).first()
-        if not t or t.expires_at < db.func.now():
+
+        if t is None or t.expires_at < datetime.utcnow():  # noqa: DTZ003
             raise ValueError("Invalid or expired token.")
 
         user = User.query.get(t.user_id)
+        if not user:
+            raise ValueError("User not found.")
+        if not token or not new_password:
+            raise ValueError("Token and new password are required.")
+
         user.set_password(new_password)
         t.used = True
         db.session.commit()
