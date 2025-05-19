@@ -55,18 +55,22 @@ EMCD_SECRET=...
 ---
 
 ### 4. Миграции (Alembic)
-При первом запуске:
-Инициализация базы данных: ```bash docker compose exec api flask db init```
+#### При первом запуске:
+Инициализация базы данных: 
+```bash docker compose exec api flask db init```
 
 Появится директория migrations, а ней файл onfine_back\migrations\alembic.ini . В самом верху заполнить
+```
 [alembic]
 # th to migration scripts
 script_location = migrations
 
 # Database URL
 sqlalchemy.url = указать DATABASE_URL
+```
 
-4. Создание миграций: ```bash docker compose exec api flask db migrate -m "Добавление миграций"```
+#### Создание миграций: 
+```bash docker compose exec api flask db migrate -m "Добавление миграций"```
 
 | Когда делать                      | Команды                                                                                                                                                                  |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
