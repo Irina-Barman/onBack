@@ -1,13 +1,15 @@
+import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from flask_jwt_extended import create_access_token
+from dotenv import load_dotenv
 
-from ..api.validators import validate_email, validate_password
 from ..extensions import db
 from ..models.token_store import Token
 from ..models.user import User
 from ..utils.mailer import send_email
+
+load_dotenv()
 
 
 class AuthService:
@@ -26,10 +28,6 @@ class AuthService:
         :raises ValueError: Если адрес электронной почты уже зарегистрирован.
         :return: Зарегистрированный пользователь.
         """
-        # Валидация email
-        validate_email(email)
-        # Валидация пароля
-        validate_password(password)
 
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
@@ -97,11 +95,7 @@ class AuthService:
         if not email or not password:
             raise ValueError("Email and password are required.")
 
-        access_token = create_access_token(
-            identity=str(user.id),
-            expires_delta=timedelta(days=7),  # «длинный» токен на неделю
-        )
-        # Вычисляем срок действия токена
+        access_token = os.getenv("JWT_ACCESS_TOKEN_EXPIRES")
 
         expire_timestamp = int(
             (datetime.utcnow() + timedelta(days=7)).timestamp(),  # noqa: DTZ003
@@ -164,7 +158,6 @@ class AuthService:
         if not token or not new_password:
             raise ValueError("Token and new password are required.")
 
-        validate_password(new_password)
         user.set_password(new_password)
         t.used = True
         db.session.commit()
