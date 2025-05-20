@@ -22,7 +22,9 @@ consumer = KafkaConsumer(
 
 
 def _percent(ptype: int, lvl: int) -> Decimal:
-    row = ReferralLevel.query.filter_by(program_type=ptype, level=lvl, active=True).first()
+    row = ReferralLevel.query.filter_by(
+        program_type=ptype, level=lvl, active=True
+    ).first()
     return Decimal(row.percent) / 100 if row else Decimal(0)
 
 

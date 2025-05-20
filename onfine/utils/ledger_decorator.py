@@ -3,12 +3,17 @@
 при успешном выполнении функции-обёртки.
 """
 
+import logging
 from decimal import Decimal
 from functools import wraps
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from ..extensions import db
 from ..models.ledger_entry import LedgerEntry, LedgerType
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def ledger(
@@ -17,23 +22,30 @@ def ledger(
     direction: str,
     network_from_arg: Optional[str] = None,
     amount_from_arg: Optional[str] = None,
-):
+) -> Callable:
     """
+    Декоратор для автоматической записи в таблицу ledger_entries.
+
+    Args:
+        ledger_type (LedgerType): Тип записи в журнале.
+        direction (str): Направление записи (вход или выход).
+        network_from_arg (Optional[str]): Имя аргумента для сети.
+        amount_from_arg (Optional[str]): Имя аргумента для суммы.
+
     Пример использования:
 
         @ledger(LedgerType.withdraw, direction="out",
                 network_from_arg="network",
                 amount_from_arg="amount")
         def withdraw_funds(user, network, amount, dest, twofa_code): ...
-
     • origin_table / origin_id берутся из объекта-результата (`return`) –
       он должен иметь атрибуты __tablename__ и id (модели SQLAlchemy).
     • user_id определяется из kwargs['user'] или args[0] (если он модель User).
     """
 
-    def decorator(fn: Callable):
+    def decorator(fn: Callable) -> Callable:
         @wraps(fn)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             result = fn(*args, **kwargs)
 
             try:
@@ -69,7 +81,7 @@ def ledger(
                 db.session.commit()
             except Exception as e:  # не рушим бизнес-логику
                 db.session.rollback()
-                print(f"[LEDGER] failed: {e}")
+                logger.error(f"[LEDGER] failed: {e}", exc_info=True)
 
             return result
 

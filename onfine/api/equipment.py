@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Any, Dict, List
 
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
@@ -12,9 +13,20 @@ ns = Namespace("equipment", description="Майнинг-оборудование
 
 _eq = ns.model(
     "Equipment",
-    {"id": fields.Integer, "name": fields.String, "cost_usdt": fields.String, "opex_pct": fields.String},
+    {
+        "id": fields.Integer,
+        "name": fields.String,
+        "cost_usdt": fields.String,
+        "opex_pct": fields.String,
+    },
 )
-_inv_in = ns.model("InvestIn", {"equipment_id": fields.Integer(required=True), "amount": fields.String(required=True)})
+_inv_in = ns.model(
+    "InvestIn",
+    {
+        "equipment_id": fields.Integer(required=True),
+        "amount": fields.String(required=True),
+    },
+)
 _batch_in = ns.model(
     "BatchIn",
     {
@@ -29,7 +41,12 @@ _batch_in = ns.model(
 @ns.route("/")
 class EqList(Resource):
     @ns.marshal_list_with(_eq)
-    def get(self):
+    def get(self) -> List[Dict[str, Any]]:
+        """Получает список доступного майнинг-оборудования.
+
+        Return:
+            list: Список объектов оборудования.
+        """
         from onfine.models.mining_equipment import MiningEquipment
 
         return MiningEquipment.query.all()
@@ -39,7 +56,12 @@ class EqList(Resource):
 class Invest(Resource):
     @jwt_required()
     @ns.expect(_inv_in)
-    def post(self):
+    def post(self) -> Dict[str, str]:
+        """Создает инвестицию в оборудование.
+
+        Return:
+            dict: Статус операции.
+        """
         user = User.query.get(get_jwt_identity())
         d = ns.payload
         isvc.invest(user, d["equipment_id"], Decimal(d["amount"]))
@@ -49,7 +71,12 @@ class Invest(Resource):
 @ns.route("/batch")
 class Batch(Resource):
     @ns.expect(_batch_in)  # ← допускаем только админов в реальном коде
-    def post(self):
+    def post(self) -> Dict[str, int]:
+        """Записывает данные о полученом оборудовании.
+
+        Return:
+            dict: ID созданной партии.
+        """
         d = ns.payload
         b = psvc.record_mined(
             d["equipment_id"],
