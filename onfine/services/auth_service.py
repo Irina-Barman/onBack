@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
+from flask_jwt_extended import create_access_token
 
 from ..extensions import db
 from ..models.token_store import Token
@@ -95,11 +96,20 @@ class AuthService:
         if not email or not password:
             raise ValueError("Email and password are required.")
 
-        access_token = os.getenv("JWT_ACCESS_TOKEN_EXPIRES")
+        expires_in_seconds = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES"))
+
+        access_token = create_access_token(
+            identity=str(user.id),
+            expires_delta=timedelta(seconds=expires_in_seconds),
+        )
 
         expire_timestamp = int(
-            (datetime.utcnow() + timedelta(days=7)).timestamp(),  # noqa: DTZ003
-        )
+            (
+                datetime.utcnow() + timedelta(seconds=expires_in_seconds)  # noqa: DTZ003
+            ).timestamp(),
+
+        if not email or not password:
+            raise ValueError("Email and password are required.")
 
         return {
             "accessToken": access_token,
