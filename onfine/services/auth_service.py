@@ -107,15 +107,10 @@ class AuthService:
             (
                 datetime.utcnow() + timedelta(seconds=expires_in_seconds)  # noqa: DTZ003
             ).timestamp(),
+        )
 
         if not email or not password:
             raise ValueError("Email and password are required.")
-
-        access_token = os.getenv("JWT_ACCESS_TOKEN_EXPIRES")
-
-        expire_timestamp = int(
-            (datetime.utcnow() + timedelta(days=7)).timestamp(),  # noqa: DTZ003
-        )
 
         return {
             "accessToken": access_token,
