@@ -36,13 +36,9 @@ def invest(
     # списываем полную сумму со счёта пользователя
     wsvc.debit(user, "erc", gross_amount)
 
-    inv = EquipmentInvestment.query.filter_by(
-        user_id=user.id, equipment_id=equipment_id
-    ).first()
+    inv = EquipmentInvestment.query.filter_by(user_id=user.id, equipment_id=equipment_id).first()
     if not inv:
-        inv = EquipmentInvestment(
-            user_id=user.id, equipment_id=equipment_id, net_amount=net
-        )
+        inv = EquipmentInvestment(user_id=user.id, equipment_id=equipment_id, net_amount=net)
         db.session.add(inv)
     else:
         inv.net_amount += net
