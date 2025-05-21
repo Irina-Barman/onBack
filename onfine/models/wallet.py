@@ -15,8 +15,7 @@ _key_b64 = os.getenv("FERNET_KEY")
 if not _key_b64:
     _key_b64 = Fernet.generate_key().decode()
     logger.warning(
-        "FERNET_KEY not set; generated temporary key:\n%s\n"
-        "Add it to your .env to persist encrypted private keys!",
+        "FERNET_KEY not set; generated temporary key:\n%s\n" "Add it to your .env to persist encrypted private keys!",
         _key_b64,
     )
 
@@ -38,9 +37,7 @@ class Wallet(db.Model):
     pk_enc = db.Column(db.LargeBinary, nullable=False)  # зашифрованный privkey
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    __table_args__ = (
-        db.UniqueConstraint("user_id", "network", name="uq_user_network"),
-    )
+    __table_args__ = (db.UniqueConstraint("user_id", "network", name="uq_user_network"),)
 
     # helpers ----------------------------------------------------
     @staticmethod

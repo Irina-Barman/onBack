@@ -104,9 +104,7 @@ class Register(Resource):
         data: Dict[str, Any] = request.json or {}
         email: Optional[str] = data.get("email")
         password: Optional[str] = data.get("password")
-        partner_uid: Optional[str] = data.get(
-            "partner_uid"
-        ) or request.args.get(
+        partner_uid: Optional[str] = data.get("partner_uid") or request.args.get(
             "partner_uid",
         )
 

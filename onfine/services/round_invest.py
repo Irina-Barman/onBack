@@ -26,11 +26,7 @@ def invest(user: Any, amount: Decimal) -> RoundInvestment:
     :return: Объект RoundInvestment, представляющий инвестицию.
     """
     # ищем открытый раунд
-    r = (
-        FundingRound.query.filter_by(state=RoundState.OPEN)
-        .order_by(FundingRound.id)
-        .first()
-    )
+    r = FundingRound.query.filter_by(state=RoundState.OPEN).order_by(FundingRound.id).first()
     if not r:
         r = FundingRound(cap_usdt=CAP_DEFAULT)
         db.session.add(r)
