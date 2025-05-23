@@ -13,9 +13,22 @@ from flask_restx import Namespace, Resource, fields
 from onfine.models.user import User
 from onfine.services import wallet_service as svc
 
+from ..api.error_handlers import register_error_handlers
+
 ns = Namespace("wallets", description="Кошельки, баланс, вывод")
 
-# ---------- swagger models ----------
+register_error_handlers(ns)
+
+# ----------- Swagger-модели ----------
+# Модель ошибки
+err_model = ns.model(
+    "Error",
+    {
+        "error": fields.String(description="Error code"),
+        "message": fields.String(description="Error message"),
+    },
+)
+
 _wallets = ns.model(
     "WalletList",
     {
