@@ -18,6 +18,8 @@ import logging
 from decimal import Decimal
 from typing import Dict, List
 
+from sqlalchemy import func
+
 from ..api.error_handlers import RegistrationError
 from ..blockchain.providers import BEP20, ERC20, TRC20
 from ..extensions import db
@@ -38,19 +40,63 @@ logger = logging.getLogger(__name__)
 
 # ───────── helpers
 def _gen_addr_pk(network: str) -> tuple[str, str]:
-    """Генерирует адрес и приватный ключ для заданной сети."""
+    """
+    Генерирует адрес и приватный ключ для заданной сети.
+
+    Функция создает новый адрес и соответствующий приватный ключ в зависимости от
+    указанной сети. Поддерживаются сети ERC20, BEP20 и TRC20.
+
+    Args:
+    ----------
+    network : str
+        Название сети, для которой необходимо сгенерировать адрес и приватный ключ.
+
+    Return:
+    ----------
+    tuple[str, str]
+        Кортеж, содержащий сгенерированный адрес и приватный ключ.
+
+    Exceptions:
+    -----------
+    ValueError
+        Если указана неизвестная сеть.
+    """
     if network == "erc":
         return ERC20.generate_wallet()
     if network == "bep":
         return BEP20.generate_wallet()
     if network == "trc":
         return TRC20.generate_wallet()
+
     raise ValueError("Unknown network")
 
 
 # ───────── wallet CRUD
 def create_wallets(user: User) -> Dict[str, str]:
-    """Создает кошельки для пользователя, если они еще не существуют."""
+    """
+    Создать кошельки для пользователя во всех сетях из NETWORKS, отсутствующих у него.
+
+    Проверяет, какие кошельки уже существуют у пользователя, и для
+    отсутствующих сетей генерирует новые адреса и зашифрованные приватные ключи.
+    Созданные кошельки добавляются в сессию базы данных и сохраняются.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, для которого создаются кошельки.
+
+    Return:
+    ----------
+    Dict[str, str]
+        Словарь с сетями в качестве ключей и соответствующими адресами кошельков.
+
+    Exceptions:
+    -----------
+    ValueError
+        Если произошла ошибка при генерации адреса или приватного ключа для сети.
+    RegistrationError
+        Если произошла ошибка при сохранении новых кошельков в базе данных.
+    """
     existing = {w.network: w.address for w in user.wallets}
 
     for net in NETWORKS:
@@ -69,7 +115,7 @@ def create_wallets(user: User) -> Dict[str, str]:
                 logger.error(
                     f"Ошибка при создании кошелька для сети {net}: {str(e)}"
                 )
-                raise  # Пробрасываем ValueError дальше
+                raise
 
     try:
         db.session.commit()
@@ -85,14 +131,47 @@ def create_wallets(user: User) -> Dict[str, str]:
 
 
 def list_wallets(user: User) -> Dict[str, str] | None:
-    """Return список кошельков пользователя."""
+    """
+    Получить словарь с адресами кошельков пользователя по сетям.
+
+    Формирует словарь, где ключ — название сети, а значение —
+    адрес кошелька пользователя в этой сети. Если у пользователя нет
+    ни одного кошелька, Возвращается None.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, для которого извлекаются кошельки.
+
+    Return:
+    ----------
+    Dict[str, str] | None
+        Словарь с сетями и соответствующими адресами кошельков пользователя,
+        либо None, если кошельков нет.
+    """
     rows = {w.network: w.address for w in user.wallets}
     return rows or None
 
 
 # ───────── fees / balance
 def transfer_fee_table() -> Dict[str, Decimal]:
-    """Return таблицу сборов за перевод для каждой сети."""
+    """
+    Получить таблицу комиссий за переводы для всех сетей.
+
+    Извлекает из базы данных комиссии за переводы (в USDT) для сетей,
+    перечисленных в константе NETWORKS. Возвращается словарь, где ключ —
+    название сети, а значение — комиссия в виде Decimal.
+
+    Return:
+    ----------
+    Dict[str, Decimal]
+        Словарь с комиссиями за переводы по сетям.
+
+    Exceptions:
+    -----------
+    ValueError
+        Если отсутствуют комиссии для одной или нескольких сетей из NETWORKS.
+    """
     fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
     missing_networks = [net for net in NETWORKS if net not in fees]
 
@@ -108,40 +187,73 @@ def transfer_fee_table() -> Dict[str, Decimal]:
 
 
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
-    """Return расчетный баланс пользователя для каждой сети."""
-    res: Dict[str, Decimal] = {}
-    for net in NETWORKS:
-        deposits = (
-            db.session.query(
-                db.func.coalesce(db.func.sum(Transaction.amount), 0),
-            )
-            .filter_by(
-                user_id=user.id,
-                network=net,
-                type=TxType.deposit,
-                status=TxStatus.confirmed,
-            )
-            .scalar()
+    """
+    Рассчитывает баланс пользователя для каждой сети.
+
+    Суммирует подтвержденные транзакции пользователя
+    (депозиты и выводы) для каждой сети из списка NETWORKS.
+    Возврашается словарь, где ключи представляют собой названия сетей
+    с суффиксом '_balance', а значения — соответствующие балансы
+    (разница между депозитами и выводами).
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, для которого необходимо рассчитать баланс.
+
+    Return:
+    ----------
+    Dict[str, Decimal]
+        Словарь, в котором ключами являются названия сетей с суффиксом
+        '_balance', а значениями — балансы пользователей в этих сетях.
+    """
+    balances = {f"{net}_balance": Decimal(0) for net in NETWORKS}
+
+    results = (
+        db.session.query(
+            Transaction.network,
+            Transaction.type,
+            func.coalesce(func.sum(Transaction.amount), 0),
         )
-        withdraws = (
-            db.session.query(
-                db.func.coalesce(db.func.sum(Transaction.amount), 0),
-            )
-            .filter_by(
-                user_id=user.id,
-                network=net,
-                type=TxType.withdraw,
-                status=TxStatus.confirmed,
-            )
-            .scalar()
+        .filter(
+            Transaction.user_id == user.id,
+            Transaction.network.in_(NETWORKS),
+            Transaction.status == TxStatus.confirmed,
+            Transaction.type.in_([TxType.deposit, TxType.withdraw]),
         )
-        res[f"{net}_balance"] = Decimal(deposits) - Decimal(withdraws)
-    return res
+        .group_by(Transaction.network, Transaction.type)
+        .all()
+    )
+
+    for network, tx_type, amount_sum in results:
+        key = f"{network}_balance"
+        if tx_type == TxType.deposit:
+            balances[key] += Decimal(amount_sum)
+        elif tx_type == TxType.withdraw:
+            balances[key] -= Decimal(amount_sum)
+
+    return balances
 
 
 # ───────── history
 def history(user: User) -> List[Transaction]:
-    """Return историю транзакций пользователя."""
+    """
+    Получить историю транзакций пользователя.
+
+    Извлекает все транзакции, связанные с указанным пользователем,
+    сортируя их по времени создания в порядке убывания. Возвращается
+    список объектов Transaction.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, для которого извлекается история транзакций.
+
+    Return:
+    ----------
+    List[Transaction]
+        Список транзакций пользователя, отсортированных по времени создания.
+    """
     return (
         Transaction.query.filter_by(user_id=user.id)
         .order_by(Transaction.created_at.desc())
@@ -150,7 +262,31 @@ def history(user: User) -> List[Transaction]:
 
 
 def balance_for(user: User, network: str) -> Decimal:
-    """Return баланс пользователя для указанной сети."""
+    """
+    Получить баланс пользователя для указанной сети.
+
+    Возвращает баланс пользователя в заданной сети, используя
+    вспомогательную функцию user_balance_stub, которая возвращает словарь
+    с балансами по сетям. Ключ словаря формируется как '{network}_balance'.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, для которого запрашивается баланс.
+    network : str
+        Название сети, для которой требуется получить баланс.
+
+    Return:
+    ----------
+    Decimal
+        Баланс пользователя в указанной сети.
+
+    Exceptions:
+    -----------
+    KeyError
+        Если баланс для указанной сети отсутствует в словаре, 
+        возвращаемом user_balance_stub.
+    """
     return user_balance_stub(user)[f"{network}_balance"]
 
 
@@ -161,7 +297,28 @@ def balance_for(user: User, network: str) -> Decimal:
     amount_from_arg="amount",
 )
 def debit(user: User, network: str, amount: Decimal) -> Transaction:
-    """Дебетует указанную сумму с баланса пользователя."""
+    """
+    Дебетует указанную сумму с баланса пользователя.
+
+    Создает новую транзакцию типа "покупка" для
+    указанного пользователя,уменьшая его баланс на заданную сумму.
+    Транзакция сохраняется в базе данных
+    и возвращается объект Transaction.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, с баланса которого будет списана сумма.
+    network : str
+        Название сети, в которой производится дебетование.
+    amount : Decimal
+        Сумма, которую необходимо дебетовать.
+
+    Return:
+    ----------
+    Transaction
+        Объект созданной транзакции.
+    """
     tx = Transaction(
         user_id=user.id,
         type=TxType.purchase,
@@ -187,7 +344,38 @@ def withdraw_funds(
     dest: str,
     twofa_code: str,
 ) -> Transaction:
-    """Выводит средства пользователя на указанный адрес."""
+    """
+    Выводит средства пользователя на указанный адрес.
+
+    Проверяет наличие сети, корректность кода двухфакторной аутентификации,
+    а также достаточность баланса для вывода средств с учетом комиссии.
+    Если все проверки пройдены, средства переводятся на указанный адрес,
+    и создается объект Transaction, который сохраняется в базе данных.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, который инициирует вывод средств.
+    network : str
+        Название сети, из которой выводятся средства.
+    amount : Decimal
+        Сумма, которую необходимо вывести.
+    dest : str
+        Адрес, на который будут переведены средства.
+    twofa_code : str
+        Код двухфакторной аутентификации для подтверждения операции.
+
+    Return:
+    ----------
+    Transaction
+        Объект созданной транзакции.
+
+    Exceptions:
+    -----------
+    ValueError
+        Если сеть неизвестна, код 2FA неверен, комиссия не найдена,
+        недостаточный баланс или кошелек не найден.
+    """
     if network not in NETWORKS:
         raise ValueError(f"Unknown network: {network}")
     if twofa_code != "123456":
@@ -231,13 +419,44 @@ def withdraw_funds(
 
 
 def ref_balance(user: User) -> Decimal:
-    """Return реферальный баланс пользователя."""
+    """
+    Возвращает реферальный баланс пользователя.
+
+    Функция пытается получить объект ReferralBalance по идентификатору пользователя.
+    Если объект найден, возвращается его баланс в виде Decimal, иначе возвращается 0.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, для которого запрашивается реферальный баланс.
+
+    Return:
+    ----------
+    Decimal
+        Реферальный баланс пользователя.
+    """  # noqa: E501
     rb = ReferralBalance.query.get(user.id)
     return Decimal(rb.balance) if rb else Decimal(0)
 
 
 def ref_credit(user_id: int, amount: Decimal) -> None:
-    """Кредитует реферальный баланс пользователя."""
+    """
+    Кредитует реферальный баланс пользователя.
+
+    Функция добавляет указанную сумму к реферальному балансу пользователя с заданным user_id.
+    Если запись о реферальном балансе отсутствует, создается новая с начальным балансом amount.
+
+    Args:
+    ----------
+    user_id : int
+        Идентификатор пользователя, чей реферальный баланс будет увеличен.
+    amount : Decimal
+        Сумма, которую необходимо добавить к реферальному балансу.
+
+    Return:
+    ----------
+    None
+    """
     rb = ReferralBalance.query.get(user_id)
     if not rb:
         rb = ReferralBalance(user_id=user_id, balance=amount)
@@ -249,10 +468,34 @@ def ref_credit(user_id: int, amount: Decimal) -> None:
 
 @ledger(LedgerType.referral, direction="out")  # отрицательное списание
 def ref_debit(user: User, amount: Decimal) -> Transaction:
-    """Дебетует сумму из реферального баланса пользователя."""
+    """
+    Дебетует сумму из реферального баланса пользователя.
+
+    Функция проверяет наличие реферального баланса и его достаточность для
+    списания указанной суммы. Если баланс достаточен сумма списывается,
+    и создается объект Transaction, который сохраняется в базе данных.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, у которого будет списана сумма.
+    amount : Decimal
+        Сумма, которую необходимо дебетовать из реферального баланса.
+
+    Return:
+    ----------
+    Transaction
+        Объект созданной транзакции.
+
+    Exceptions:
+    -----------
+    ValueError
+        Если реферальный баланс недостаточен или отсутствует.
+    """
     rb = ReferralBalance.query.get(user.id)
     if not rb or rb.balance < amount:
         raise ValueError("Not enough referral balance")
+
     rb.balance -= amount
     tx = Transaction(
         user_id=user.id,
@@ -272,13 +515,32 @@ def ref_debit(user: User, amount: Decimal) -> Transaction:
     network_from_arg="network",
     amount_from_arg="amount",
 )
-#  Переименовано с credit_to_balance
 def credit_to_user_balance(
     user: User,
     network: str,
     amount: Decimal,
 ) -> Transaction:
-    """Кредитует сумму на баланс пользователя."""
+    """
+    Кредитует сумму на баланс пользователя.
+
+    Функция создает транзакцию, которая вычитает указанную сумму из баланса
+    пользователя в заданной сети. Транзакция сохраняется в базе данных
+    с состоянием 'подтверждено'.
+
+    Args:
+    ----------
+    user : User
+        Объект пользователя, которому будет зачислена сумма.
+    network : str
+        Название сети, в которой производится зачисление.
+    amount : Decimal
+        Сумма, которую необходимо зачислить на баланс пользователя.
+
+    Returns:
+    ----------
+    Transaction
+        Объект созданной транзакции, представляющий операцию зачисления.
+    """
     tx = Transaction(
         user_id=user.id,
         type=TxType.profit,
@@ -297,7 +559,21 @@ def credit_to_network_balance(
     network: str,
     amount: Decimal,
 ) -> None:
-    """Кредитует сумму на баланс пользователя для указанной сети."""
+    """
+    Кредитует указанную сумму на баланс пользователя для заданной сети.
+
+    Создаёт транзакцию типа "депозит" со статусом "подтверждён" и
+    соответствующую запись в бухгалтерском журнале (LedgerEntry),
+    затем сохраняет изменения в базе данных.
+
+    Args:
+        user_id (int): Идентификатор пользователя, которому начисляется сумма.
+        network (str): Название или идентификатор сети, для которой проводится операция.
+        amount (Decimal): Сумма для зачисления на баланс.
+
+    Returns:
+        None
+    """
     tx = Transaction(
         user_id=user_id,
         type=TxType.deposit,
