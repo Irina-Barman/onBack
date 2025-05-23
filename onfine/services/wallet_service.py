@@ -18,6 +18,7 @@ import logging
 from decimal import Decimal
 from typing import Dict, List
 
+from ..api.error_handlers import RegistrationError
 from ..blockchain.providers import BEP20, ERC20, TRC20
 from ..extensions import db
 from ..models.ledger_entry import LedgerEntry
@@ -54,17 +55,32 @@ def create_wallets(user: User) -> Dict[str, str]:
 
     for net in NETWORKS:
         if net not in existing:
-            addr, pk = _gen_addr_pk(net)
-            w = Wallet(
-                user_id=user.id,
-                network=net,
-                address=addr,
-                pk_enc=Wallet.encrypt_pk(pk),
-            )
-            db.session.add(w)
-            existing[net] = addr
+            try:
+                addr, pk = _gen_addr_pk(net)
+                w = Wallet(
+                    user_id=user.id,
+                    network=net,
+                    address=addr,
+                    pk_enc=Wallet.encrypt_pk(pk),
+                )
+                db.session.add(w)
+                existing[net] = addr
+            except ValueError as e:
+                logger.error(
+                    f"Ошибка при создании кошелька для сети {net}: {str(e)}"
+                )
+                raise  # Пробрасываем ValueError дальше
 
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        logger.error(
+            f"Ошибка при сохранении кошельков в базе данных: {str(e)}"
+        )
+        raise RegistrationError(
+            "Ошибка при сохранении кошельков в базе данных."
+        )
+
     return existing
 
 
@@ -77,7 +93,18 @@ def list_wallets(user: User) -> Dict[str, str] | None:
 # ───────── fees / balance
 def transfer_fee_table() -> Dict[str, Decimal]:
     """Return таблицу сборов за перевод для каждой сети."""
-    return {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
+    fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
+    missing_networks = [net for net in NETWORKS if net not in fees]
+
+    if missing_networks:
+        logger.error(
+            f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}"
+        )
+        raise ValueError(
+            f"Missing transfer fees for networks: {', '.join(missing_networks)}"
+        )
+
+    return fees
 
 
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
@@ -166,7 +193,11 @@ def withdraw_funds(
     if twofa_code != "123456":
         raise ValueError("Invalid 2FA")
 
-    fee = transfer_fee_table()[network]
+    try:
+        fee = transfer_fee_table()[network]
+    except KeyError:
+        raise ValueError(f"Transfer fee for network '{network}' not found.")
+
     total = amount + fee
 
     if balance_for(user, network) < total:
