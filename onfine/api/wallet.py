@@ -1,8 +1,4 @@
-"""
-REST-namespace /wallets
-Создание кошельков, комиссии, вывод, баланс, история.
-"""
-
+import logging
 import os
 from decimal import Decimal
 from typing import Any, Dict, List
@@ -15,12 +11,14 @@ from onfine.services import wallet_service as svc
 
 from ..api.error_handlers import register_error_handlers
 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 ns = Namespace("wallets", description="Кошельки, баланс, вывод")
 
 register_error_handlers(ns)
 
 # ----------- Swagger-модели ----------
-# Модель ошибки
 err_model = ns.model(
     "Error",
     {
@@ -53,7 +51,9 @@ _withdraw_in = ns.model(
     {
         "network": fields.String(required=True, enum=["bep", "erc", "trc"]),
         "amount": fields.String(required=True, example="50.00"),
-        "destination": fields.String(required=True, example="0x… / TA… / bnb…"),
+        "destination": fields.String(
+            required=True, example="0x… / TA… / bnb…"
+        ),
         "2fa_code": fields.String(required=True, example="123456"),
     },
 )
@@ -112,7 +112,16 @@ class WalletCreate(Resource):
             dict: Словарь с адресами созданных кошельков.
         """
         user = User.query.get(get_jwt_identity())
-        return svc.create_wallets(user)
+        try:
+            result = svc.create_wallets(user)
+            logger.info(f"Wallets created for user {user.id}: {result}")
+            return result
+        except Exception as e:
+            logger.error(
+                f"Failed to create wallets for user {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, f"Failed to create wallets: {e}")
 
 
 # ---------- /get_wallet ----------
@@ -129,8 +138,17 @@ class WalletGet(Resource):
             dict: Словарь с адресами кошельков или None, если они отсутствуют.
         """
         user = User.query.get(get_jwt_identity())
-        res = svc.list_wallets(user)
-        return res if res else {"wallet": None}
+        try:
+            res = svc.list_wallets(user)
+            if not res:
+                res = {"bep": None, "erc": None, "trc": None}
+            logger.info(f"Wallets retrieved for user {user.id}: {res}")
+            return res
+        except Exception as e:
+            logger.error(
+                f"Failed to get wallets for user {user.id}: {e}", exc_info=True
+            )
+            ns.abort(500, f"Failed to get wallets: {e}")
 
 
 # ---------- /transfer_fee ----------
@@ -144,7 +162,13 @@ class TransferFee(Resource):
         Return:
             dict: Словарь с комиссиями для различных сетей.
         """
-        return {k: str(v) for k, v in svc.transfer_fee_table().items()}
+        try:
+            fees = {k: str(v) for k, v in svc.transfer_fee_table().items()}
+            logger.info(f"Transfer fees requested: {fees}")
+            return fees
+        except Exception as e:
+            logger.error(f"Failed to get transfer fees: {e}", exc_info=True)
+            ns.abort(500, f"Failed to get transfer fees: {e}")
 
 
 # ---------- /withdraw ----------
@@ -162,13 +186,30 @@ class Withdraw(Resource):
         """
         user = User.query.get(get_jwt_identity())
         data = ns.payload
-        tx = svc.withdraw_funds(
-            user=user,
-            network=data["network"],
-            amount=Decimal(data["amount"]),
-            dest=data["destination"],
-            twofa_code=data["2fa_code"],
-        )
+        try:
+            tx = svc.withdraw_funds(
+                user=user,
+                network=data["network"],
+                amount=Decimal(data["amount"]),
+                dest=data["destination"],
+                twofa_code=data["2fa_code"],
+            )
+            logger.info(
+                f"Withdrawal requested by user {user.id}:"
+                f"network={data['network']}, amount={data['amount']},"
+                f"dest={data['destination']}, tx_id={tx.id}",
+            )
+        except ValueError as e:
+            logger.warning(
+                f"Invalid withdrawal request by user {user.id}: {e}"
+            )
+            ns.abort(400, str(e))
+        except Exception as e:
+            logger.error(
+                f"Failed to withdraw funds for user {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, f"Failed to withdraw funds: {e}")
         return {"status": tx.status.value, "transaction_id": tx.id}, 201
 
 
@@ -186,8 +227,22 @@ class Balance(Resource):
             dict: Словарь с балансами для различных сетей.
         """
         user = User.query.get(get_jwt_identity())
-        bal = svc.user_balance_stub(user)
-        return {k: str(v) for k, v in bal.items()}
+        try:
+            bep_balance = svc.get_real_balance(user, "bep")
+            erc_balance = svc.get_real_balance(user, "erc")
+            trc_balance = svc.get_real_balance(user, "trc")
+            balances = {
+                "bep_balance": str(bep_balance),
+                "erc_balance": str(erc_balance),
+                "trc_balance": str(trc_balance),
+            }
+            logger.info(f"Balances retrieved for user {user.id}: {balances}")
+            return balances
+        except Exception as e:
+            logger.error(
+                f"Failed to get balance for user {user.id}: {e}", exc_info=True
+            )
+            ns.abort(500, f"Failed to get balance: {e}")
 
 
 # ---------- /transactions ----------
@@ -204,7 +259,10 @@ class Transactions(Resource):
             list: Список транзакций пользователя.
         """
         user = User.query.get(get_jwt_identity())
-        return svc.history(user)
+        try:
+            return svc.history(user)
+        except Exception as e:
+            ns.abort(500, f"Failed to get transaction history: {e}")
 
 
 # ---------- /check_wallet ----------
@@ -219,6 +277,9 @@ class CheckWallet(Resource):
         Return:
             dict: Статус проверки кошелька.
         """
+        # Можно добавить реальную проверку, если нужно
+        wallet_address = ns.payload.get("wallet_address")
+        logger.info(f"Wallet check requested for address: {wallet_address}")
         return {"status": "safe"}
 
 
@@ -235,7 +296,18 @@ class RefBal(Resource):
             dict: Словарь с реферальным балансом.
         """
         user = User.query.get(get_jwt_identity())
-        return {"balance": str(svc.ref_balance(user))}
+        try:
+            balance = svc.ref_balance(user)
+            logger.info(
+                f"Referral balance retrieved for user {user.id}: {balance}"
+            )
+            return {"balance": str(balance)}
+        except Exception as e:
+            logger.error(
+                f"Failed to get referral balance for user {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, f"Failed to get referral balance: {e}")
 
 
 # ---------- /referral_withdraw ----------
@@ -251,9 +323,32 @@ class RefWithdraw(Resource):
             dict: Статус операции.
         """
         user = User.query.get(get_jwt_identity())
-        amt = Decimal(ns.payload["amount"])
-        if amt < Decimal(os.getenv("REF_MIN_PAYOUT", "10")):
-            return {"error": "below minimum"}, 400
-        svc.ref_debit(user, amt)  # переносим на основной баланс
-        svc.debit(user, "erc", -amt)  # зачисляем на обычный (ERC пример)
+        try:
+            amt = Decimal(ns.payload["amount"])
+        except Exception:
+            logger.warning(
+                f"Invalid referral withdraw amount format by user {user.id}"
+            )
+            ns.abort(400, "Invalid amount format")
+        min_payout = Decimal(os.getenv("REF_MIN_PAYOUT", "10"))
+        if amt < min_payout:
+            logger.warning(
+                f"Referral withdraw amount below minimum by user {user.id}: {amt} < {min_payout}"
+            )
+            ns.abort(400, f"Amount below minimum payout {min_payout}")
+        try:
+            svc.ref_debit(user, amt)
+            svc.debit(user, "erc", -amt)
+            logger.info(
+                f"Referral withdraw successful for user {user.id}, amount: {amt}"
+            )
+        except ValueError as e:
+            logger.warning(f"Referral withdraw failed for user {user.id}: {e}")
+            ns.abort(400, str(e))
+        except Exception as e:
+            logger.error(
+                f"Failed to withdraw referral funds for user {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, f"Failed to withdraw referral funds: {e}")
         return {"status": "ok"}
