@@ -186,6 +186,32 @@ def transfer_fee_table() -> Dict[str, Decimal]:
     return fees
 
 
+def get_real_balance(user: User, network: str) -> Decimal:
+    """
+    Получить реальный баланс пользователя из блокчейна для указанной сети.
+
+    Args:
+        user (User): Пользователь.
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        Decimal: Баланс пользователя в сети.
+    """
+    if network == "trc":
+        return TRC20.get_real_balance(user)
+    if network == "erc":
+        wallet = next((w for w in user.wallets if w.network == "erc"), None)
+        if not wallet:
+            return Decimal(0)
+        return ERC20.balance(wallet.address)
+    if network == "bep":
+        wallet = next((w for w in user.wallets if w.network == "bep"), None)
+        if not wallet:
+            return Decimal(0)
+        return BEP20.balance(wallet.address)
+    raise ValueError(f"Unknown network: {network}")
+
+
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
     """
     Рассчитывает баланс пользователя для каждой сети.
@@ -284,7 +310,7 @@ def balance_for(user: User, network: str) -> Decimal:
     Exceptions:
     -----------
     KeyError
-        Если баланс для указанной сети отсутствует в словаре, 
+        Если баланс для указанной сети отсутствует в словаре,
         возвращаемом user_balance_stub.
     """
     return user_balance_stub(user)[f"{network}_balance"]
