@@ -403,7 +403,7 @@ TRC20_ABI = [
 
 class TRC20(TokenNetwork):
     client = Tron(provider=HTTPProvider("https://api.trongrid.io"))
-    contract_addr = "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf"
+    contract_addr = "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj"
     _contract_instance = None
     decimals = 6
 
