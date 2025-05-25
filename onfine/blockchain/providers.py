@@ -120,11 +120,7 @@ class ERC20(TokenNetwork):
         ]
 
         # Получение баланса
-        bal = (
-            ERC20._contract(abi)
-            .functions.balanceOf(Web3.to_checksum_address(addr))
-            .call()
-        )
+        bal = ERC20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
         return Decimal(bal) / (10**ERC20.decimals)
 
     # ---------- gas ----------
@@ -259,11 +255,7 @@ class BEP20(TokenNetwork):
                 "type": "function",
             },
         ]
-        bal = (
-            BEP20._contract(abi)
-            .functions.balanceOf(Web3.to_checksum_address(addr))
-            .call()
-        )
+        bal = BEP20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
         return Decimal(bal) / (10**BEP20.decimals)
 
     @staticmethod

@@ -287,6 +287,7 @@ def history(user: User) -> List[Transaction]:
     )
 
 
+
 def balance_for(user: User, network: str) -> Decimal:
     """
     Получить баланс пользователя для указанной сети.
