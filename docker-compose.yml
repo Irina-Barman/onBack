@@ -1,14 +1,15 @@
 services:
   api:
     build: .
-    command: >
-      gunicorn 'onfine.app_factory:create_app()'
-      -b 0.0.0.0:5500
-      --worker-tmp-dir /dev/shm
-      --workers 4
+    command: gunicorn "onfine.app_factory:create_app()" -b 0.0.0.0:5500 --worker-tmp-dir /dev/shm --workers 4
     env_file: .env
-    volumes: [ .:/app ]
-    depends_on: [ db ]
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_started
     ports:
       - "5500:5500"
     restart: unless-stopped
@@ -36,9 +37,8 @@ services:
       - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
       - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
       - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER  # Добавлено
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
       - KAFKA_KRAFT_CLUSTER_ID=rRaW0-9gReSBC0NlNimyNQ
-
 
 volumes:
   pgdata:
