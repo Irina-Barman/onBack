@@ -198,7 +198,7 @@ def get_real_balance(user: User, network: str) -> Decimal:
         Decimal: Баланс пользователя в сети.
     """
     if network == "trc":
-        return TRC20.get_real_balance(user)
+        return TRC20.get_balance_for_user(user)
     if network == "erc":
         wallet = next((w for w in user.wallets if w.network == "erc"), None)
         if not wallet:
