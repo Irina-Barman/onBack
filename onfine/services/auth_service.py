@@ -106,7 +106,7 @@ class AuthService:
         expire_timestamp = int(
             (
                 datetime.utcnow() + timedelta(seconds=expires_in_seconds)  # noqa: DTZ003
-            ).timestamp(),
+            ).timestamp()
 
             (datetime.utcnow() + timedelta(seconds=expires_in_seconds)).timestamp(),  # noqa: DTZ003
         )
