@@ -10,13 +10,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from onfine.models.user import User
 from onfine.services import wallet_service as svc
 
-from ..api.error_handlers import register_error_handlers
+from ..api.error_handlers import register_error_handlers as err
 
 logger = logging.getLogger(__name__)
 
 ns = Namespace("wallets", description="Кошельки, баланс, вывод")
 
-register_error_handlers(ns)
+err(ns)
 
 # ----------- Swagger-модели ----------
 err_model = ns.model(
@@ -123,13 +123,13 @@ class WalletCreate(Resource):
                 f"Ошибка базы данных при создании кошельков для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, "Database error occurred.")
+            raise err.WalletCreationError("Database error occurred.")
         except Exception as e:
             logger.error(
                 f"Не удалось создать кошельки для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, f"Failed to create wallets: {e}")
+            raise err.WalletCreationError("Failed to create wallets.")
 
 
 # ---------- /get_wallet ----------
@@ -149,17 +149,26 @@ class WalletGet(Resource):
         try:
             res = svc.list_wallets(user)
             if not res:
-                res = {"bep": None, "erc": None, "trc": None}
+                raise err.WalletRetrievalError("Wallets not found.")
             logger.info(
                 f"Адреса кошельков получены для пользователя {user.id}: {res}"
             )
             return res
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Ошибка базы данных при получении адресов кошельков для пользователя {user.id}: {e}",
+                exc_info=True,
+            )
+            raise err.WalletRetrievalError("Database error occurred.")
+        except err.WalletRetrievalError as e:
+            logger.warning(f"{e.message} для пользователя {user.id}")
+            raise
         except Exception as e:
             logger.error(
                 f"Не удалось получить адреса кошельков для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, f"Failed to get wallets: {e}")
+            raise err.WalletRetrievalError("Failed to get wallets.")
 
 
 # ---------- /transfer_fee ----------
@@ -175,11 +184,22 @@ class TransferFee(Resource):
         """
         try:
             fees = {k: str(v) for k, v in svc.transfer_fee_table().items()}
-            logger.info(f"Transfer fees requested: {fees}")
+            if not fees:
+                logger.warning("Комиссии за переводы не найдены.")
+                return {}, 204
+            logger.info(f"Запрошены комиссии за переводы: {fees}")
             return fees
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Произошла ошибка базы данных при получении комиссий за переводы: {e}",
+                exc_info=True,
+            )
+            raise err.TransferFeeRetrievalError("Database error occurred.")
         except Exception as e:
-            logger.error(f"Failed to get transfer fees: {e}", exc_info=True)
-            ns.abort(500, f"Failed to get transfer fees: {e}")
+            logger.error(
+                f"Не удалось получить комиссии за переводы: {e}", exc_info=True
+            )
+            raise err.TransferFeeRetrievalError("Failed to get transfer fees.")
 
 
 # ---------- /withdraw ----------
@@ -206,26 +226,26 @@ class Withdraw(Resource):
                 twofa_code=data["2fa_code"],
             )
             logger.info(
-                f"Запрос на вывод средств от пользователя {user.id}: network={data['network']}, amount={data['amount']}, dest={data['destination']}, tx_id={tx.id}"
+                f"Запрос на вывод средств от пользователя {user.id}:(network={data['network']}, amount={data['amount']}, dest={data['destination']}, tx_id={tx.id}"
             )
+            return {"status": tx.status.value, "transaction_id": tx.id}, 201
         except ValueError as e:
             logger.warning(
                 f"Некорректный запрос на вывод средств от пользователя {user.id}: {e}"
             )
-            ns.abort(400, str(e))
+            raise err.WithdrawError("Invalid request for withdrawal.")
         except SQLAlchemyError as e:
             logger.error(
                 f"Ошибка базы данных при выводе средств для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, "Database error occurred.")
+            raise err.WithdrawError("Database error occurred.")
         except Exception as e:
             logger.error(
                 f"Не удалось вывести средства для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, f"Failed to withdraw funds: {e}")
-        return {"status": tx.status.value, "transaction_id": tx.id}, 201
+            raise err.WithdrawError("Failed to withdraw funds.")
 
 
 # ---------- /balance ----------
@@ -260,13 +280,13 @@ class Balance(Resource):
                 f"Ошибка базы данных при получении баланса для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, "Database error occurred.")
+            raise err.BalanceError("Database error occurred.")
         except Exception as e:
             logger.error(
                 f"Не удалось получить баланс для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, f"Failed to get balance: {e}")
+            raise err.BalanceError("Failed to get balance.")
 
 
 # ---------- /transactions ----------
@@ -286,7 +306,11 @@ class Transactions(Resource):
         try:
             return svc.history(user)
         except Exception as e:
-            ns.abort(500, f"Failed to get transaction history: {e}")
+            logger.error(
+                f"Ошибка при получении истории транзакций пользователя {user.id}: {e}",
+                exc_info=True,
+            )
+            raise err.TransactionError("Failed to get transaction history.")
 
 
 # ---------- /check_wallet ----------
@@ -323,15 +347,15 @@ class RefBal(Resource):
         try:
             balance = svc.ref_balance(user)
             logger.info(
-                f"Referral balance retrieved for user {user.id}: {balance}"
+                f"Баланс рефералов для пользователя {user.id}: {balance}"
             )
             return {"balance": str(balance)}
         except Exception as e:
             logger.error(
-                f"Failed to get referral balance for user {user.id}: {e}",
+                f"Ошибка при получении баланса рефералов пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, f"Failed to get referral balance: {e}")
+            raise err.ReferralError("Failed to get referral balance.")
 
 
 # ---------- /referral_withdraw ----------
@@ -351,28 +375,33 @@ class RefWithdraw(Resource):
             amt = Decimal(ns.payload["amount"])
         except Exception:
             logger.warning(
-                f"Invalid referral withdraw amount format by user {user.id}"
+                f"Неверный формат суммы вывода рефералов от пользователя {user.id}"
             )
             ns.abort(400, "Invalid amount format")
+
         min_payout = Decimal(os.getenv("REF_MIN_PAYOUT", "10"))
         if amt < min_payout:
             logger.warning(
-                f"Referral withdraw amount below minimum by user {user.id}: {amt} < {min_payout}"
+                f"Сумма вывода рефералов меньше минимальной у пользователя {user.id}: {amt} < {min_payout}"
             )
             ns.abort(400, f"Amount below minimum payout {min_payout}")
+
         try:
             svc.ref_debit(user, amt)
             svc.debit(user, "erc", -amt)
             logger.info(
-                f"Referral withdraw successful for user {user.id}, amount: {amt}"
+                f"Успешный вывод рефералов у пользователя {user.id}, сумма: {amt}"
             )
         except ValueError as e:
-            logger.warning(f"Referral withdraw failed for user {user.id}: {e}")
+            logger.warning(
+                f"Ошибка вывода рефералов у пользователя {user.id}: {e}"
+            )
             ns.abort(400, str(e))
         except Exception as e:
             logger.error(
-                f"Failed to withdraw referral funds for user {user.id}: {e}",
+                f"Ошибка при выводе рефералов у пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            ns.abort(500, f"Failed to withdraw referral funds: {e}")
+            raise err.ReferralError("Failed to withdraw referral funds.")
+
         return {"status": "ok"}
