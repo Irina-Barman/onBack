@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
+from sqlalchemy.exc import SQLAlchemyError
 
 from onfine.models.user import User
 from onfine.services import wallet_service as svc
@@ -113,11 +114,19 @@ class WalletCreate(Resource):
         user = User.query.get(get_jwt_identity())
         try:
             result = svc.create_wallets(user)
-            logger.info(f"Wallets created for user {user.id}: {result}")
+            logger.info(
+                f"Кошельки созданы для пользователя {user.id}: {result}"
+            )
             return result
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Ошибка базы данных при создании кошельков для пользователя {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, "Database error occurred.")
         except Exception as e:
             logger.error(
-                f"Failed to create wallets for user {user.id}: {e}",
+                f"Не удалось создать кошельки для пользователя {user.id}: {e}",
                 exc_info=True,
             )
             ns.abort(500, f"Failed to create wallets: {e}")
@@ -141,11 +150,14 @@ class WalletGet(Resource):
             res = svc.list_wallets(user)
             if not res:
                 res = {"bep": None, "erc": None, "trc": None}
-            logger.info(f"Wallets retrieved for user {user.id}: {res}")
+            logger.info(
+                f"Адреса кошельков получены для пользователя {user.id}: {res}"
+            )
             return res
         except Exception as e:
             logger.error(
-                f"Failed to get wallets for user {user.id}: {e}", exc_info=True
+                f"Не удалось получить адреса кошельков для пользователя {user.id}: {e}",
+                exc_info=True,
             )
             ns.abort(500, f"Failed to get wallets: {e}")
 
@@ -194,18 +206,22 @@ class Withdraw(Resource):
                 twofa_code=data["2fa_code"],
             )
             logger.info(
-                f"Withdrawal requested by user {user.id}:"
-                f"network={data['network']}, amount={data['amount']},"
-                f"dest={data['destination']}, tx_id={tx.id}",
+                f"Запрос на вывод средств от пользователя {user.id}: network={data['network']}, amount={data['amount']}, dest={data['destination']}, tx_id={tx.id}"
             )
         except ValueError as e:
             logger.warning(
-                f"Invalid withdrawal request by user {user.id}: {e}"
+                f"Некорректный запрос на вывод средств от пользователя {user.id}: {e}"
             )
             ns.abort(400, str(e))
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Ошибка базы данных при выводе средств для пользователя {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, "Database error occurred.")
         except Exception as e:
             logger.error(
-                f"Failed to withdraw funds for user {user.id}: {e}",
+                f"Не удалось вывести средства для пользователя {user.id}: {e}",
                 exc_info=True,
             )
             ns.abort(500, f"Failed to withdraw funds: {e}")
@@ -235,11 +251,20 @@ class Balance(Resource):
                 "erc_balance": str(erc_balance),
                 "trc_balance": str(trc_balance),
             }
-            logger.info(f"Balances retrieved for user {user.id}: {balances}")
+            logger.info(
+                f"Баланс получен для пользователя {user.id}: {balances}"
+            )
             return balances
+        except SQLAlchemyError as e:
+            logger.error(
+                f"Ошибка базы данных при получении баланса для пользователя {user.id}: {e}",
+                exc_info=True,
+            )
+            ns.abort(500, "Database error occurred.")
         except Exception as e:
             logger.error(
-                f"Failed to get balance for user {user.id}: {e}", exc_info=True
+                f"Не удалось получить баланс для пользователя {user.id}: {e}",
+                exc_info=True,
             )
             ns.abort(500, f"Failed to get balance: {e}")
 
