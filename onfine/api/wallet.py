@@ -12,7 +12,6 @@ from onfine.services import wallet_service as svc
 from ..api.error_handlers import register_error_handlers
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 ns = Namespace("wallets", description="Кошельки, баланс, вывод")
 

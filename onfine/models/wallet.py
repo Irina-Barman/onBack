@@ -7,7 +7,6 @@ from cryptography.fernet import Fernet
 from ..extensions import db
 
 # Настройка логирования
-logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 # Получение ключа шифрования из переменной окружения

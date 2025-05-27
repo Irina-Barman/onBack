@@ -33,8 +33,7 @@ from ..utils.ledger_decorator import LedgerType, ledger
 
 NETWORKS: tuple[str, ...] = ("bep", "erc", "trc")
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 
