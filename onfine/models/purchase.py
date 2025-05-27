@@ -18,11 +18,17 @@ class Purchase(db.Model):
     __tablename__ = "purchases"
 
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.BigInteger, db.ForeignKey("users.id"), nullable=False)
-    package_id = db.Column(db.Integer, db.ForeignKey("packages.id"), nullable=False)
+    user_id = db.Column(
+        db.BigInteger, db.ForeignKey("users.id"), nullable=False
+    )
+    package_id = db.Column(
+        db.Integer, db.ForeignKey("packages.id"), nullable=False
+    )
 
     # финансы
-    amount_usdt = db.Column(db.Numeric(18, 2), nullable=False)  # цена пакета (фиксируется)
+    amount_usdt = db.Column(
+        db.Numeric(18, 2), nullable=False
+    )  # цена пакета (фиксируется)
     gas_usdt = db.Column(db.Numeric(18, 2), nullable=False)  # комиссия сети
     network = db.Column(db.String(8), nullable=False)  # 'bep' | 'erc' | 'trc'
 
@@ -33,3 +39,7 @@ class Purchase(db.Model):
     # связи
     package = db.relationship("Package", back_populates="purchases")
     user = db.relationship("User", back_populates="purchases")
+    # с Transaction
+    transaction = db.relationship(
+        "Transaction", back_populates="purchase", uselist=False
+    )

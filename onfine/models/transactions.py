@@ -32,3 +32,5 @@ class Transaction(db.Model):
     address = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     confirmed_at = db.Column(db.DateTime)
+    # связь с Purchase
+    purchase = db.relationship("Purchase", back_populates="transaction", uselist=False)
