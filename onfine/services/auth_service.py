@@ -104,7 +104,8 @@ class AuthService:
         )
 
         expire_timestamp = int(
-            (datetime.utcnow() + timedelta(seconds=expires_in_seconds)).timestamp(),  # noqa: DTZ003
+
+            (datetime.utcnow() + timedelta(seconds=expires_in_seconds)).timestamp()  # noqa: DTZ003
         )
 
         if not email or not password:

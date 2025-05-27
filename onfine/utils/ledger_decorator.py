@@ -11,8 +11,6 @@ from typing import Any, Callable, Optional
 from ..extensions import db
 from ..models.ledger_entry import LedgerEntry, LedgerType
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
