@@ -36,9 +36,10 @@ class Transaction(db.Model):
     address = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     confirmed_at = db.Column(db.DateTime)
-    # связь с Purchase
+
+    # Связь с Purchase
     purchase_id = db.Column(
-        db.Integer, db.ForeignKey("purchases.id"), unique=True, nullable=True
+        db.BigInteger, db.ForeignKey("purchases.id"), nullable=True
     )
     purchase = db.relationship(
         "Purchase", back_populates="transaction", uselist=False

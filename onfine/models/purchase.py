@@ -25,7 +25,6 @@ class Purchase(db.Model):
         db.Integer, db.ForeignKey("packages.id"), nullable=False
     )
 
-    # финансы
     amount_usdt = db.Column(
         db.Numeric(18, 2), nullable=False
     )  # цена пакета (фиксируется)
@@ -36,16 +35,13 @@ class Purchase(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     confirmed_at = db.Column(db.DateTime)
 
+    is_from_database = db.Column(db.Boolean, default=False)
+
     # связи
     package = db.relationship("Package", back_populates="purchases")
     user = db.relationship("User", back_populates="purchases")
-    # с Transaction
-    transaction_id = db.Column(
-        db.BigInteger,
-        db.ForeignKey("transactions.id"),
-        unique=True,
-        nullable=True,
-    )
+
+    # Связь с Transaction
     transaction = db.relationship(
         "Transaction", back_populates="purchase", uselist=False
     )
