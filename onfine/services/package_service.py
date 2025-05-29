@@ -3,6 +3,9 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Dict, List, TypedDict
 
+from onfine.blockchain.providers import BEP20, ERC20, TRC20
+from onfine.models.wallet import Wallet
+
 from ..api.error_handlers import (
     InsufficientBalanceError,
     NetworkNotFoundError,
@@ -193,7 +196,7 @@ def process_purchase_confirmation(purchase_id: int) -> None:
             db.session.add(transaction)
             db.session.flush()
 
-###           # ЛОГИКА ПОДТВЕРЖДЕНИЯ ТРАНЗАКЦИИ
+            ###           # ЛОГИКА ПОДТВЕРЖДЕНИЯ ТРАНЗАКЦИИ
             success = confirm_transaction(
                 transaction
             )  # НУЖНО РЕАЛИЗОВАТЬ ЭТУ ФУНКЦИЮ!!!!!
@@ -217,7 +220,7 @@ def process_purchase_confirmation(purchase_id: int) -> None:
         logger.error(
             f"Ошибка при обработке подтверждения покупки {purchase_id}: {e}"
         )
-        raise # Можно выбросить исключение, чтобы обработать его на уровне API
+        raise  # Можно выбросить исключение, чтобы обработать его на уровне API
 
 
 def send_kafka_event(purchase: Purchase, success: bool) -> None:
@@ -260,7 +263,44 @@ def confirm_transaction(transaction: Transaction) -> bool:
     Returns:
         bool: True, если транзакция успешно подтверждена; иначе False.
     """
-    # Здесь должна быть логика подтверждения транзакции
-    # Например, вызов внешнего API для подтверждения
-    # Вернуть True, если успешно; иначе False
-    return True  # Это просто заглушка, замените реальной логикой
+    # Получаем информацию о типе сети из транзакции
+    network = transaction.network
+    amount = transaction.amount
+    user_id = transaction.user_id  # Получаем ID пользователя из транзакции
+
+    # Получаем кошелек пользователя
+    wallet = Wallet.query.filter_by(user_id=user_id, network=network).first()
+    if not wallet:
+        logger.error(
+            f"Кошелек для пользователя {user_id} в сети {network} не найден"
+        )
+        return False
+
+    # Дешифруем приватный ключ
+    try:
+        user_private_key = Wallet.decrypt_pk(wallet.pk_enc)
+    except Exception as e:
+        logger.error(f"Ошибка при дешифровании приватного ключа: {e}")
+        return False
+
+    to_address = wallet.address  # Используем адрес из кошелька
+
+    try:
+        if network == "ERC20":
+            tx_id = ERC20.transfer(user_private_key, to_address, amount)
+        elif network == "BEP20":
+            tx_id = BEP20.transfer(user_private_key, to_address, amount)
+        elif network == "TRC20":
+            tx_id = TRC20.transfer(user_private_key, to_address, amount)
+        else:
+            logger.error(f"Неизвестная сеть: {network}")
+            return False
+
+        logger.info(f"Транзакция {tx_id} успешно отправлена на сеть {network}")
+        return True
+    except InsufficientBalanceError as e:
+        logger.error(f"Недостаточно средств для транзакции: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка при подтверждении транзакции: {e}")
+        return False
