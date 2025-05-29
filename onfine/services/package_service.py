@@ -193,10 +193,10 @@ def process_purchase_confirmation(purchase_id: int) -> None:
             db.session.add(transaction)
             db.session.flush()
 
-            # Логика подтверждения транзакции
+###           # ЛОГИКА ПОДТВЕРЖДЕНИЯ ТРАНЗАКЦИИ
             success = confirm_transaction(
                 transaction
-            )  # Нужно реализовать эту функцию
+            )  # НУЖНО РЕАЛИЗОВАТЬ ЭТУ ФУНКЦИЮ!!!!!
             if success:
                 transaction.status = TxStatus.confirmed
                 p.status = PurchaseStatus.completed
