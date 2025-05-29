@@ -16,29 +16,47 @@ from ..models.transactions import Transaction, TxStatus, TxType
 from ..models.user import User
 from ..services import wallet_service as wsvc
 from ..utils import kafka_producer as kfk
-from ..utils.ledger_decorator import LedgerType, ledger
 
 logger = logging.getLogger(__name__)
 
 
 class PurchaseResult(TypedDict):
+    """Тип для результата проверки или создания покупки."""
+
     purchase: Purchase
     from_database: bool
 
 
 def list_packages() -> List[Package]:
-    """Возвращает список всех доступных пакетов."""
+    """Возвращает список всех доступных пакетов.
+
+    Return:
+        List[Package]: Список объектов пакетов.
+    """
     return Package.query.all()
 
 
 @lru_cache(maxsize=1)
 def gas_table() -> Dict[str, Decimal]:
-    """Создает таблицу газовых цен. Кэшируется для оптимизации."""
+    """Создает таблицу газовых цен. Кэшируется для оптимизации.
+
+    Returns:
+        Dict[str, Decimal]: Словарь с газовыми ценами по сетям.
+    """
     return {r.network: Decimal(r.gas_usdt) for r in NetworkGas.query.all()}
 
 
 def check_balance(user: User, network: str, amount: Decimal) -> None:
-    """Проверяет баланс пользователя."""
+    """Проверяет баланс пользователя.
+
+    Args:
+        user (User ): Пользователь, чей баланс проверяется.
+        network (str): Название сети, для которой проверяется баланс.
+        amount (Decimal): Сумма, которую нужно проверить.
+
+    Raises:
+        InsufficientBalanceError: Если баланс пользователя недостаточен.
+    """
     balance = wsvc.balance_for(user, network)
     if balance < amount:
         logger.warning(
@@ -51,9 +69,19 @@ def check_balance(user: User, network: str, amount: Decimal) -> None:
 def check_or_create_purchase(
     user: User, package_id: int, network: str
 ) -> PurchaseResult:
-    """
-    Проверяет наличие покупки в статусе 'pending' или создает новую.
-    Возвращает словарь с ключами 'purchase' и 'from_database'.
+    """Проверяет наличие покупки в статусе 'pending' или создает новую.
+
+    Args:
+        user (User ): Пользователь, для которого проверяется или создается покупка.
+        package_id (int): Идентификатор пакета, который пользователь хочет купить.
+        network (str): Название сети, для которой производится покупка.
+
+    Returns:
+        PurchaseResult: Словарь с ключами 'purchase' и 'from_database'.
+
+    Raises:
+        PackageNotFoundError: Если пакет с указанным идентификатором не найден.
+        NetworkNotFoundError: Если сеть не найдена в таблице газовых цен.
     """
     pending_purchase = Purchase.query.filter_by(
         user_id=user.id, status=PurchaseStatus.pending, network=network
@@ -83,7 +111,20 @@ def check_or_create_purchase(
 
 
 def create_purchase(user: User, package_id: int, network: str) -> Purchase:
-    """Создает новую покупку и списывает средства."""
+    """Создает новую покупку со статусом pending.
+
+    Args:
+        user (User ): Пользователь, который делает покупку.
+        package_id (int): Идентификатор пакета для покупки.
+        network (str): Название сети, в которой осуществляется покупка.
+
+    Returns:
+        Purchase: Созданный объект покупки.
+
+    Raises:
+        PackageNotFoundError: Если пакет с указанным идентификатором не найден.
+        NetworkNotFoundError: Если сеть не найдена в таблице газовых цен.
+    """
     pkg = Package.query.get(package_id)
     if not pkg:
         logger.error(f"Пакет с id {package_id} не найден при создании покупки")
@@ -96,39 +137,18 @@ def create_purchase(user: User, package_id: int, network: str) -> Purchase:
         )
         raise NetworkNotFoundError(f"Network {network} not found")
 
-    total = pkg.price_usdt + fee
+    purchase = Purchase(
+        user=user,
+        package=pkg,
+        amount_usdt=pkg.price_usdt,
+        gas_usdt=fee,
+        network=network,
+        status=PurchaseStatus.pending,
+    )
 
-    # Проверка баланса перед списанием
-    check_balance(user, network, total)
-
-    # Обеспечиваем атомарность операции создания покупки и списания средств
     with db.session.begin():
-        logger.info(
-            f"Списываем средства у пользователя {user.id} на сумму {total}"
-        )
-        wsvc.debit(user, network, total)
-
-        purchase = Purchase(
-            user=user,
-            package=pkg,
-            amount_usdt=pkg.price_usdt,
-            gas_usdt=fee,
-            network=network,
-            status=PurchaseStatus.pending,
-        )
         db.session.add(purchase)
         db.session.flush()  # Чтобы получить purchase.id
-
-        transaction = Transaction(
-            user_id=user.id,
-            type=TxType.purchase,
-            status=TxStatus.pending,
-            network=network,
-            amount=pkg.price_usdt,
-            fee=fee,
-            purchase_id=purchase.id,
-        )
-        db.session.add(transaction)
         logger.info(
             f"Создана покупка {purchase.id} для пользователя {user.id}"
         )
@@ -136,8 +156,15 @@ def create_purchase(user: User, package_id: int, network: str) -> Purchase:
     return purchase
 
 
-def confirm_purchase(purchase_id: int, success: bool) -> Purchase:
-    """Подтверждает покупку и отправляет событие в Kafka."""
+def process_purchase_confirmation(purchase_id: int) -> None:
+    """Обрабатывает подтверждение покупки.
+
+    Args:
+        purchase_id (int): Идентификатор покупки для подтверждения.
+
+    Raises:
+        ValueError: Если покупка или пользователь не найдены.
+    """
     p = Purchase.query.get(purchase_id)
     if not p:
         logger.error(
@@ -145,52 +172,95 @@ def confirm_purchase(purchase_id: int, success: bool) -> Purchase:
         )
         raise ValueError(f"Purchase with id {purchase_id} not found")
 
-    new_status = (
-        PurchaseStatus.completed if success else PurchaseStatus.canceled
-    )
+    if not p.user:
+        logger.error(f"Пользователь для покупки {purchase_id} не найден")
+        raise ValueError(f"User  for purchase {purchase_id} not found")
 
-    with db.session.begin():
-        # Обновляем статус покупки
-        p.status = new_status
+    total = p.amount_usdt + p.gas_usdt
+    check_balance(p.user, p.network, total)
 
-        # Создаем транзакцию
-        transaction = Transaction(
-            user_id=p.user_id,
-            type=TxType.purchase,
-            status=TxStatus.pending,
-            network=p.network,
-            amount=p.amount_usdt,
-            fee=p.gas_usdt,
-            purchase_id=p.id,
+    try:
+        with db.session.begin():
+            transaction = Transaction(
+                user_id=p.user_id,
+                type=TxType.purchase,
+                status=TxStatus.pending,
+                network=p.network,
+                amount=p.amount_usdt,
+                fee=p.gas_usdt,
+                purchase_id=p.id,
+            )
+            db.session.add(transaction)
+            db.session.flush()
+
+            # Логика подтверждения транзакции
+            success = confirm_transaction(
+                transaction
+            )  # Нужно реализовать эту функцию
+            if success:
+                transaction.status = TxStatus.confirmed
+                p.status = PurchaseStatus.completed
+                logger.info(f"Покупка {purchase_id} подтверждена")
+            else:
+                transaction.status = TxStatus.failed
+                p.status = PurchaseStatus.canceled
+                logger.warning(
+                    f"Покупка {purchase_id} отменена из-за неудачной транзакции"
+                )
+
+            db.session.commit()  # Зафиксируем изменения
+
+            # Отправка события Kafka
+            send_kafka_event(p, success)
+
+    except Exception as e:
+        logger.error(
+            f"Ошибка при обработке подтверждения покупки {purchase_id}: {e}"
         )
-        db.session.add(transaction)
-        db.session.flush()  # Получаем id транзакции
+        raise # Можно выбросить исключение, чтобы обработать его на уровне API
 
-        # Если покупка подтверждена, обновляем статус транзакции и отправляем событие
-        if success:
-            transaction.status = TxStatus.confirmed
-            try:
-                kfk.send(
-                    "purchase.completed",
-                    {
-                        "purchase_id": p.id,
-                        "user_id": p.user_id,
-                        "amount": str(p.amount_usdt),
-                        "partner_uid": p.user.partner_uid,
-                        "network": p.network,
-                        "program_type": 1,
-                        "ts": p.created_at.isoformat(),
-                    },
-                )
-                logger.info(
-                    f"Отправлено событие Kafka для покупки {purchase_id}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"Ошибка при отправке события Kafka для покупки {purchase_id}: {e}"
-                )
-                raise  # Можно выбросить исключение, чтобы обработать его на уровне API
 
-        logger.info(f"Статус покупки {purchase_id} обновлен на {p.status}")
+def send_kafka_event(purchase: Purchase, success: bool) -> None:
+    """Отправляет событие в Kafka о завершении покупки.
 
-    return p
+    Args:
+        purchase (Purchase): Объект покупки, для которой отправляется событие.
+        success (bool): Статус успешности завершения покупки.
+
+    Raises:
+        Exception: Если произошла ошибка при отправке события.
+    """
+    try:
+        kfk.send(
+            "purchase.completed",
+            {
+                "purchase_id": purchase.id,
+                "user_id": purchase.user_id,
+                "amount": str(purchase.amount_usdt),
+                "partner_uid": getattr(purchase.user, "partner_uid", None),
+                "network": purchase.network,
+                "program_type": 1,
+                "ts": purchase.created_at.isoformat(),
+            },
+        )
+        logger.info(f"Отправлено событие Kafka для покупки {purchase.id}")
+    except Exception as e:
+        logger.error(
+            f"Ошибка при отправке события Kafka для покупки {purchase.id}: {e}"
+        )
+        raise  # Можно выбросить исключение, чтобы обработать его на уровне API
+
+
+def confirm_transaction(transaction: Transaction) -> bool:
+    """Подтверждает транзакцию и возвращает статус успешности.
+
+    Args:
+        transaction (Transaction): Объект транзакции для подтверждения.
+
+    Returns:
+        bool: True, если транзакция успешно подтверждена; иначе False.
+    """
+    # Здесь должна быть логика подтверждения транзакции
+    # Например, вызов внешнего API для подтверждения
+    # Вернуть True, если успешно; иначе False
+    return True  # Это просто заглушка, замените реальной логикой
