@@ -4,6 +4,8 @@ from decimal import Decimal
 from functools import lru_cache
 from typing import Dict, List, TypedDict
 
+from web3 import Web3
+
 from onfine.blockchain.providers import BEP20, ERC20, TRC20
 from onfine.models.wallet import Wallet
 
@@ -25,7 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 class PurchaseResult(TypedDict):
-    """Тип для результата проверки или создания покупки.
+    """
+    Тип для результата проверки или создания покупки.
 
     Attributes:
         purchase (Purchase): Объект покупки.
@@ -50,7 +53,8 @@ def list_packages() -> List[Package]:
 
 @lru_cache(maxsize=1)
 def gas_table() -> Dict[str, Decimal]:
-    """Создает и кэширует таблицу газовых цен для всех сетей.
+    """
+    Создает и кэширует таблицу газовых цен для всех сетей.
 
     Извлекает из базы данных все записи с ценами газа по сетям и формирует словарь.
 
@@ -70,7 +74,8 @@ def reset_gas_table_cache() -> None:
 
 
 def check_balance(user: User, network: str, amount: Decimal) -> None:
-    """Проверяет, что у пользователя достаточно средств на указанной сети.
+    """
+    Проверяет, что у пользователя достаточно средств на указанной сети.
 
     Args:
         user (User): Пользователь, чей баланс проверяется.
@@ -80,19 +85,26 @@ def check_balance(user: User, network: str, amount: Decimal) -> None:
     Exceptions:
         InsufficientBalanceError: Если баланс пользователя меньше требуемой суммы.
     """
-    balance = wsvc.balance_for(user, network)
-    if balance < amount:
-        logger.warning(
-            f"Недостаточно средств у пользователя {user.id} на сети {network}: "
-            f"требуется {amount}, доступно {balance}"
-        )
-        raise InsufficientBalanceError("Insufficient balance for the purchase")
+    try:
+        balance = wsvc.balance_for(user, network)
+        if balance < amount:
+            logger.warning(
+                f"Недостаточно средств у пользователя {user.id} на сети {network}: "
+                f"требуется {amount}, доступно {balance}"
+            )
+            raise InsufficientBalanceError(
+                "Insufficient balance for the purchase"
+            )
+    except Exception as e:
+        logger.error(f"Ошибка при проверке баланса: {e}")
+        raise
 
 
 def check_or_create_purchase(
     user: User, package_id: int, network: str
 ) -> PurchaseResult:
-    """Проверяет наличие ожидающей покупки или создает новую.
+    """
+    Проверяет наличие ожидающей покупки или создает новую.
 
     Проверяет, есть ли у пользователя в указанной сети покупка со статусом 'pending'.
     Если есть — возвращает её, иначе создает новую покупку с учетом цены пакета и газа.
@@ -138,7 +150,8 @@ def check_or_create_purchase(
 
 
 def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
-    """Создает новую покупку с статусом 'pending' и сохраняет в базе.
+    """
+    Создает новую покупку с статусом 'pending' и сохраняет в базе.
 
     Args:
         user (User): Пользователь, совершающий покупку.
@@ -178,14 +191,18 @@ def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
 
 
 def process_purchase_confirmation(purchase_id: int) -> None:
-    """Обрабатывает подтверждение покупки: создает транзакцию, подтверждает её и обновляет статусы.
+    """
+    Обрабатывает подтверждение покупки, создавая транзакцию и обновляя статусы.
 
     Args:
-        purchase_id (int): ID покупки, которую нужно подтвердить.
+        purchase_id (int): Идентификатор покупки, которую необходимо подтвердить.
 
     Exceptions:
-        ValueError: Если покупка или пользователь не найдены.
-        Exception: При ошибках в процессе обработки.
+        ValueError: Если покупка с указанным идентификатором не найдена или
+        если пользователь, связанный с покупкой, не найден.
+
+    Returns:
+        None
     """
     p = Purchase.query.get(purchase_id)
     if not p:
@@ -239,11 +256,18 @@ def process_purchase_confirmation(purchase_id: int) -> None:
 
 
 def send_kafka_event(purchase: Purchase, success: bool) -> None:
-    """Отправляет событие в Kafka о завершении покупки.
+    """
+    Отправляет событие в Kafka о завершении покупки.
 
     Args:
-        purchase (Purchase): Объект покупки.
-        success (bool): Флаг успешности покупки.
+        purchase (Purchase): Объект покупки, содержащий информацию о завершенной покупке.
+        success (bool): Указывает, была ли транзакция успешной.
+
+    Exceptions:
+        Exception: Если возникает ошибка при отправке события в Kafka.
+
+    Returns:
+        None
     """
     try:
         kfk.send(
@@ -268,31 +292,59 @@ def send_kafka_event(purchase: Purchase, success: bool) -> None:
 
 
 def check_transaction_status(network: str, tx_id: str) -> bool:
-    """Проверяет статус транзакции в указанной сети по идентификатору.
+    """
+    Проверяет статус транзакции в указанной сети по идентификатору.
 
     Args:
-        network (str): Название сети (ERC20, BEP20, TRC20).
-        tx_id (str): Идентификатор транзакции.
+        network (str): Название сети ("ERC20", "BEP20", "TRC20").
+        tx_id (str): Идентификатор транзакции, статус которой необходимо проверить.
+
+    Exceptions:
+        Exception: Если возникает ошибка при проверке статуса транзакции.
 
     Returns:
-        bool: True, если транзакция подтверждена (статус 1), иначе False.
+        bool: Возвращает True, если транзакция подтверждена, иначе False.
     """
     try:
-        if network == "ERC20":
-            receipt = ERC20.get_transaction_receipt(tx_id)
-        elif network == "BEP20":
-            receipt = BEP20.get_transaction_receipt(tx_id)
+        if network in ["ERC20", "BEP20"]:
+            # Используем Web3 для ERC20 и BEP20
+            receipt = Web3.eth.get_transaction_receipt(tx_id)
+            if receipt is None:
+                logger.warning(
+                    f"Транзакция {tx_id} еще не подтверждена или не найдена."
+                )
+                return False
+            return receipt.status == 1  # Статус 1 означает успех
+
         elif network == "TRC20":
-            receipt = TRC20.get_transaction_receipt(tx_id)
+            # Используем клиент из провайдера
+            tx_info = TRC20.client.get_transaction(tx_id)
+            if not tx_info:
+                logger.warning(f"Информация о транзакции {tx_id} не найдена.")
+                return False
+
+            receipt = tx_info.get("receipt")
+            if receipt:
+                result = receipt.get("result")
+                if result == "SUCCESS":
+                    return True
+                else:
+                    logger.warning(f"Транзакция {tx_id} не успешна: {result}")
+                    return False
+            else:
+                contract_ret = tx_info.get("contractRet")
+                if contract_ret == "SUCCESS":
+                    return True
+                else:
+                    logger.warning(
+                        f"Транзакция {tx_id} не успешна: {contract_ret}"
+                    )
+                    return False
+
         else:
             logger.error(f"Неизвестная сеть для проверки: {network}")
             return False
 
-        if receipt is None:
-            # Транзакция ещё не обработана сетью, статус неизвестен
-            return False
-        # В блокчейн-сетях статус 1 обычно означает успешное выполнение транзакции
-        return receipt.status == 1
     except Exception as e:
         logger.error(f"Ошибка при проверке статуса транзакции {tx_id}: {e}")
         return False
@@ -300,16 +352,17 @@ def check_transaction_status(network: str, tx_id: str) -> bool:
 
 def confirm_transaction(transaction: Transaction) -> bool:
     """
-    Подтверждает транзакцию: выполняет перевод средств и проверяет подтверждение.
-
-    Получает приватный ключ пользователя, инициирует перевод средств на адрес кошелька,
-    затем проверяет статус транзакции с повторными попытками.
+    Подтверждает транзакцию, выполняя перевод средств и проверяя подтверждение.
 
     Args:
-        transaction (Transaction): Объект транзакции для подтверждения.
+        transaction (Transaction): Объект транзакции, содержащий информацию о переводе.
+
+    Exceptions:
+        InsufficientBalanceError: Если недостаточно средств для выполнения транзакции.
+        Exception: Если возникает ошибка при подтверждении транзакции.
 
     Returns:
-        bool: True, если транзакция подтверждена, False в случае ошибки или неудачи.
+        bool: Возвращает True, если транзакция успешно подтверждена, иначе False.
     """
     network = transaction.network
     amount = transaction.amount
