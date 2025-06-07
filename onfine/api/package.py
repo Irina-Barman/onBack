@@ -65,6 +65,7 @@ _confirm_out = ns.model(
     },
 )
 
+
 # ---------- /packages ----------
 @ns.route("/")
 class PackageList(Resource):
@@ -77,6 +78,7 @@ class PackageList(Resource):
         """
         return svc.list_packages()
 
+
 # ---------- /packages/gas ----------
 @ns.route("/gas")
 class Gas(Resource):
@@ -88,6 +90,7 @@ class Gas(Resource):
             dict: Словарь с информацией о газовых сетях.
         """
         return {k: str(v) for k, v in svc.gas_table().items()}
+
 
 # ---------- /purchases ----------
 @ns.route("/purchases")
@@ -122,6 +125,7 @@ class Purchase(Resource):
             "from_database": from_database,  # флаг, откуда получены данные
         }, 201
 
+
 # ---------- /purchases/<id>/confirm ----------
 @ns.route("/purchases/<int:purchase_id>/confirm")
 class PurchaseConfirm(Resource):
@@ -138,5 +142,5 @@ class PurchaseConfirm(Resource):
             dict: Информация о подтвержденной покупке, включая ID и статус.
         """
         success = ns.payload["success"]
-        p = svc.confirm_purchase(purchase_id, success)
+        p = svc.process_purchase_confirmation(purchase_id, success)
         return {"purchase_id": p.id, "status": p.status.value}

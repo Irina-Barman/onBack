@@ -53,9 +53,7 @@ def send(topic: str, data: dict, retries: int = 5, backoff: int = 2) -> bool:
     """
     p = _get_producer()
     if not p:
-        logger.warning(
-            f"KafkaProducer unavailable, dropping message to '{topic}': {data}"
-        )
+        logger.warning(f"KafkaProducer unavailable, dropping message to '{topic}': {data}")
         return False
 
     for attempt in range(retries):
@@ -66,14 +64,10 @@ def send(topic: str, data: dict, retries: int = 5, backoff: int = 2) -> bool:
             logger.info(f"Message sent to '{topic}': {data}")
             return True
         except KafkaError as e:
-            logger.error(
-                f"Failed to send to Kafka topic '{topic}' on attempt {attempt + 1}: {e}"
-            )
+            logger.error(f"Failed to send to Kafka topic '{topic}' on attempt {attempt + 1}: {e}")
             if attempt < retries - 1:
                 logger.info(f"Retrying in {backoff} seconds...")
                 time.sleep(backoff)
             else:
-                logger.error(
-                    f"Exceeded maximum retries for topic '{topic}'. Message dropped: {data}"
-                )
+                logger.error(f"Exceeded maximum retries for topic '{topic}'. Message dropped: {data}")
                 return False

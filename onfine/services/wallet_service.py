@@ -111,20 +111,14 @@ def create_wallets(user: User) -> Dict[str, str]:
                 db.session.add(w)
                 existing[net] = addr
             except ValueError as e:
-                logger.error(
-                    f"Ошибка при создании кошелька для сети {net}: {str(e)}"
-                )
+                logger.error(f"Ошибка при создании кошелька для сети {net}: {str(e)}")
                 raise
 
     try:
         db.session.commit()
     except Exception as e:
-        logger.error(
-            f"Ошибка при сохранении кошельков в базе данных: {str(e)}"
-        )
-        raise RegistrationError(
-            "Ошибка при сохранении кошельков в базе данных."
-        )
+        logger.error(f"Ошибка при сохранении кошельков в базе данных: {str(e)}")
+        raise RegistrationError("Ошибка при сохранении кошельков в базе данных.")
 
     return existing
 
@@ -175,12 +169,8 @@ def transfer_fee_table() -> Dict[str, Decimal]:
     missing_networks = [net for net in NETWORKS if net not in fees]
 
     if missing_networks:
-        logger.error(
-            f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}"
-        )
-        raise ValueError(
-            f"Missing transfer fees for networks: {', '.join(missing_networks)}"
-        )
+        logger.error(f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}")
+        raise ValueError(f"Missing transfer fees for networks: {', '.join(missing_networks)}")
 
     return fees
 
@@ -279,12 +269,7 @@ def history(user: User) -> List[Transaction]:
     List[Transaction]
         Список транзакций пользователя, отсортированных по времени создания.
     """
-    return (
-        Transaction.query.filter_by(user_id=user.id)
-        .order_by(Transaction.created_at.desc())
-        .all()
-    )
-
+    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
 
 
 def balance_for(user: User, network: str) -> Decimal:

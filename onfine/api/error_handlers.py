@@ -91,6 +91,7 @@ def register_error_handlers(api_namespace: Namespace) -> None:
     регистрируются обработчики.
     :return: None
     """
+
     # общий
     @api_namespace.errorhandler(ValueError)
     def handle_value_error(error: ValueError) -> tuple[dict, int]:
