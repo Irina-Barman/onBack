@@ -13,6 +13,7 @@
 import json
 import logging
 import os
+import time
 
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
@@ -32,30 +33,41 @@ def _get_producer() -> KafkaProducer | None:
             bootstrap_servers=bootstrap,
             value_serializer=lambda d: json.dumps(d).encode(),
         )
-        # проверим сразу, что подключились
-        p.bootstrap_connected()
-        _producer = p
-        logger.info(f"KafkaProducer initialized, bootstrap={bootstrap}")
+        # Проверим сразу, что подключились
+        if p.bootstrap_connected():
+            _producer = p
+            logger.info(f"KafkaProducer initialized, bootstrap={bootstrap}")
+        else:
+            logger.error(f"Failed to connect to Kafka broker at {bootstrap}")
+            _producer = None
     except KafkaError as e:
         logger.error(f"Cannot connect to Kafka broker at {bootstrap}: {e}")
         _producer = None
     return _producer
 
 
-def send(topic: str, data: dict) -> bool:
+def send(topic: str, data: dict, retries: int = 5, backoff: int = 2) -> bool:
     """
     Отправить сообщение в Kafka.
-    Return True, если удалось запланировать отправку, False иначе.
+    Возвращает True, если удалось запланировать отправку, False иначе.
     """
     p = _get_producer()
     if not p:
         logger.warning(f"KafkaProducer unavailable, dropping message to '{topic}': {data}")
         return False
 
-    try:
-        p.send(topic, data)
-        p.flush()
-        return True
-    except KafkaError as e:
-        logger.error(f"Failed to send to Kafka topic '{topic}': {e}")
-        return False
+    for attempt in range(retries):
+        try:
+            # Отправка сообщения
+            p.send(topic, data)
+            p.flush()  # Дожидаемся завершения отправки
+            logger.info(f"Message sent to '{topic}': {data}")
+            return True
+        except KafkaError as e:
+            logger.error(f"Failed to send to Kafka topic '{topic}' on attempt {attempt + 1}: {e}")
+            if attempt < retries - 1:
+                logger.info(f"Retrying in {backoff} seconds...")
+                time.sleep(backoff)
+            else:
+                logger.error(f"Exceeded maximum retries for topic '{topic}'. Message dropped: {data}")
+                return False

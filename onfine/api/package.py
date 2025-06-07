@@ -6,7 +6,10 @@ from flask_restx import Namespace, Resource, fields
 from onfine.models.user import User
 from onfine.services import package_service as svc
 
+from ..api.error_handlers import register_error_handlers as err
+
 ns = Namespace("packages", description="Каталог пакетов и покупки")
+err(ns)
 
 # ---------- swagger models ----------
 _pkg = ns.model(
@@ -32,6 +35,7 @@ _buy_in = ns.model(
         "network": fields.String(required=True, enum=["bep", "erc", "trc"]),
     },
 )
+
 _buy_out = ns.model(
     "PurchaseOut",
     {  # тело ответа
@@ -39,9 +43,9 @@ _buy_out = ns.model(
         "status": fields.String,
         "summ": fields.String,
         "gas": fields.String,
+        "from_database": fields.Boolean,  # возвращаем флаг
     },
 )
-
 
 _confirm_in = ns.model(
     "ConfirmIn",
@@ -52,6 +56,7 @@ _confirm_in = ns.model(
         ),
     },
 )
+
 _confirm_out = ns.model(
     "ConfirmOut",
     {
@@ -91,10 +96,10 @@ class Gas(Resource):
 @ns.route("/purchases")
 class Purchase(Resource):
     @jwt_required()
-    @ns.expect(_buy_in)  # ← показывает body в Swagger
+    @ns.expect(_buy_in)  # показывает body в Swagger
     @ns.marshal_with(_buy_out, code=201)
     def post(self) -> Dict[str, Any]:
-        """Создает покупку пакета.
+        """Создает или возвращает ожидающую покупку пакета.
 
         Return:
             dict: Информация о покупке, включая ID, статус, сумму и газ.
@@ -102,16 +107,22 @@ class Purchase(Resource):
         user = User.query.get(get_jwt_identity())
         data = ns.payload
 
-        p = svc.create_purchase(
+        # Проверяем наличие существующей покупки с статусом 'pending'
+        purchase_result = svc.check_or_create_purchase(
             user,
             package_id=data["package_id"],
             network=data["network"],
         )
+
+        p = purchase_result["purchase"]
+        from_database = purchase_result["from_database"]
+
         return {
             "purchase_id": p.id,
             "status": p.status.value,
             "summ": str(p.amount_usdt),
             "gas": str(p.gas_usdt),
+            "from_database": from_database,  # флаг, откуда получены данные
         }, 201
 
 
@@ -131,5 +142,5 @@ class PurchaseConfirm(Resource):
             dict: Информация о подтвержденной покупке, включая ID и статус.
         """
         success = ns.payload["success"]
-        p = svc.confirm_purchase(purchase_id, success)
+        p = svc.process_purchase_confirmation(purchase_id, success)
         return {"purchase_id": p.id, "status": p.status.value}

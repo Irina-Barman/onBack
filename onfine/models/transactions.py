@@ -16,6 +16,7 @@ class TxStatus(str, Enum):
     pending = "pending"
     confirmed = "confirmed"
     canceled = "canceled"
+    failed = "failed"
 
 
 class Transaction(db.Model):
@@ -32,3 +33,7 @@ class Transaction(db.Model):
     address = db.Column(db.String(128))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     confirmed_at = db.Column(db.DateTime)
+
+    # Связь с Purchase
+    purchase_id = db.Column(db.BigInteger, db.ForeignKey("purchases.id"), nullable=True)
+    purchase = db.relationship("Purchase", back_populates="transaction", uselist=False)

@@ -1,7 +1,7 @@
 from flask_restx import Namespace
 
 
-# Кастомные исключения
+# Кастомные исключения Auth
 class RegistrationError(Exception):
     def __init__(self, message: str) -> None:
         self.message: str = message
@@ -15,6 +15,9 @@ class EmailConfirmationError(Exception):
 class PasswordResetError(Exception):
     def __init__(self, message: str) -> None:
         self.message: str = message
+
+
+# Wallet
 
 
 class WalletCreationError(Exception):
@@ -52,6 +55,24 @@ class ReferralError(Exception):
         self.message: str = message
 
 
+# Purchase
+
+
+class PackageNotFoundError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message: str = message
+
+
+class NetworkNotFoundError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message: str = message
+
+
+class InsufficientBalanceError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message: str = message
+
+
 def register_error_handlers(api_namespace: Namespace) -> None:
     """
     Регистрирует обработчики пользовательских исключений в заданном
@@ -71,6 +92,12 @@ def register_error_handlers(api_namespace: Namespace) -> None:
     :return: None
     """
 
+    # общий
+    @api_namespace.errorhandler(ValueError)
+    def handle_value_error(error: ValueError) -> tuple[dict, int]:
+        return {"error": "400 Bad Request", "message": str(error)}, 400
+
+    # Auth
     @api_namespace.errorhandler(RegistrationError)
     def handle_registration_error(
         error: RegistrationError,
@@ -89,10 +116,7 @@ def register_error_handlers(api_namespace: Namespace) -> None:
     ) -> tuple[dict, int]:
         return {"error": "400 Bad Request", "message": error.message}, 400
 
-    @api_namespace.errorhandler(ValueError)
-    def handle_value_error(error: ValueError) -> tuple[dict, int]:
-        return {"error": "400 Bad Request", "message": str(error)}, 400
-
+    # Wallet
     @api_namespace.errorhandler(WalletCreationError)
     def handle_wallet_creation_error(
         error: WalletCreationError,
@@ -138,3 +162,23 @@ def register_error_handlers(api_namespace: Namespace) -> None:
             "error": "500 Internal Server Error",
             "message": str(error),
         }, 500
+
+    # Purchase
+
+    @api_namespace.errorhandler(PackageNotFoundError)
+    def handle_package_not_found_error(
+        error: PackageNotFoundError,
+    ) -> tuple[dict, int]:
+        return {"error": "404 Not Found", "message": str(error)}, 404
+
+    @api_namespace.errorhandler(NetworkNotFoundError)
+    def handle_network_not_found_error(
+        error: NetworkNotFoundError,
+    ) -> tuple[dict, int]:
+        return {"error": "404 Not Found", "message": str(error)}, 404
+
+    @api_namespace.errorhandler(InsufficientBalanceError)
+    def handle_insufficient_balance_error(
+        error: InsufficientBalanceError,
+    ) -> tuple[dict, int]:
+        return {"error": "400 Bad Request", "message": str(error)}, 400

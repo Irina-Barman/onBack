@@ -103,10 +103,7 @@ class AuthService:
             expires_delta=timedelta(seconds=expires_in_seconds),
         )
 
-        expire_timestamp = int(
-
-            (datetime.utcnow() + timedelta(seconds=expires_in_seconds)).timestamp()  # noqa: DTZ003
-        )
+        expire_timestamp = int((datetime.utcnow() + timedelta(seconds=expires_in_seconds)).timestamp())  # noqa: DTZ003
 
         if not email or not password:
             raise ValueError("Email and password are required.")
