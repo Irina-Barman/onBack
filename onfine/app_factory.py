@@ -4,6 +4,15 @@ from .api import register_namespaces
 from .config import Config
 from .extensions import db, jwt, migrate
 
+# authorizations = {
+#     'Bearer': {
+#         'type': 'apiKey',
+#         'in': 'header',
+#         'name': 'Authorization',
+#         'description': 'JWT Authorization header using the Bearer scheme. Example: "Bearer <token>"'
+#     }
+# }
+
 
 def create_app() -> Flask:
     """Создает и настраивает экземпляр Flask приложения.

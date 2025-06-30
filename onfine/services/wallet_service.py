@@ -115,7 +115,8 @@ def create_wallets(user: User) -> Dict[str, str]:
                 raise
 
     try:
-        db.session.commit()
+        if db.session.new or db.session.dirty:
+            db.session.commit()
     except Exception as e:
         logger.error(f"Ошибка при сохранении кошельков в базе данных: {str(e)}")
         raise RegistrationError("Ошибка при сохранении кошельков в базе данных.")
@@ -186,8 +187,11 @@ def get_real_balance(user: User, network: str) -> Decimal:
     Returns:
         Decimal: Баланс пользователя в сети.
     """
-    if network == "trc":
-        return TRC20.get_balance_for_user(user)
+    # if network == "trc":
+    #     wallet = next((w for w in user.wallets if w.network == "trc"), None)
+    #     if not wallet:
+    #         return Decimal(0)
+    #     return TRC20.balance(wallet.address)
     if network == "erc":
         wallet = next((w for w in user.wallets if w.network == "erc"), None)
         if not wallet:

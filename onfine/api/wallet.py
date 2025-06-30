@@ -112,7 +112,7 @@ class WalletCreate(Resource):
         user = User.query.get(get_jwt_identity())
         try:
             result = svc.create_wallets(user)
-            logger.info(f"Кошельки созданы для пользователя {user.id}: {result}")
+            logger.info(f"Кошельки созданы или были найдены в db для пользователя {user.id}: {result}")
             return result
         except SQLAlchemyError as e:
             logger.error(
@@ -243,7 +243,6 @@ class Withdraw(Resource):
 @ns.route("/balance")
 class Balance(Resource):
     @jwt_required()
-    @ns.expect(_empty)
     @ns.marshal_with(_balance_out)
     def get(self) -> Dict[str, str]:
         """
@@ -256,11 +255,11 @@ class Balance(Resource):
         try:
             bep_balance = svc.get_real_balance(user, "bep")
             erc_balance = svc.get_real_balance(user, "erc")
-            trc_balance = svc.get_real_balance(user, "trc")
+            # trc_balance = svc.get_real_balance(user, "trc")
             balances = {
                 "bep_balance": str(bep_balance),
                 "erc_balance": str(erc_balance),
-                "trc_balance": str(trc_balance),
+                # "trc_balance": str(trc_balance),
             }
             logger.info(f"Баланс получен для пользователя {user.id}: {balances}")
             return balances
