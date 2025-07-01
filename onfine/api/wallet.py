@@ -10,13 +10,22 @@ from sqlalchemy.exc import SQLAlchemyError
 from onfine.models.user import User
 from onfine.services import wallet_service as svc
 
-from ..api.error_handlers import register_error_handlers as err
+from ..api.error_handlers import (
+    BalanceError,
+    ReferralError,
+    TransactionError,
+    TransferFeeRetrievalError,
+    WalletCreationError,
+    WalletRetrievalError,
+    WithdrawError,
+    register_error_handlers,
+)
 
 logger = logging.getLogger(__name__)
 
 ns = Namespace("wallets", description="Кошельки, баланс, вывод")
 
-err(ns)
+register_error_handlers(ns)
 
 # ----------- Swagger-модели ----------
 err_model = ns.model(
@@ -51,7 +60,9 @@ _withdraw_in = ns.model(
     {
         "network": fields.String(required=True, enum=["bep", "erc", "trc"]),
         "amount": fields.String(required=True, example="50.00"),
-        "destination": fields.String(required=True, example="0x… / TA… / bnb…"),
+        "destination": fields.String(
+            required=True, example="0x… / TA… / bnb…"
+        ),
         "2fa_code": fields.String(required=True, example="123456"),
     },
 )
@@ -112,20 +123,22 @@ class WalletCreate(Resource):
         user = User.query.get(get_jwt_identity())
         try:
             result = svc.create_wallets(user)
-            logger.info(f"Кошельки созданы или были найдены в db для пользователя {user.id}: {result}")
+            logger.info(
+                f"Кошельки созданы или были найдены в db для пользователя {user.id}: {result}"
+            )
             return result
         except SQLAlchemyError as e:
             logger.error(
                 f"Ошибка базы данных при создании кошельков для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.WalletCreationError("Database error occurred.")
+            raise WalletCreationError("Database error occurred.")
         except Exception as e:
             logger.error(
                 f"Не удалось создать кошельки для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.WalletCreationError("Failed to create wallets.")
+            raise WalletCreationError("Failed to create wallets.")
 
 
 # ---------- /get_wallet ----------
@@ -145,16 +158,18 @@ class WalletGet(Resource):
         try:
             res = svc.list_wallets(user)
             if not res:
-                raise err.WalletRetrievalError("Wallets not found.")
-            logger.info(f"Адреса кошельков получены для пользователя {user.id}: {res}")
+                raise WalletRetrievalError("Wallets not found.")
+            logger.info(
+                f"Адреса кошельков получены для пользователя {user.id}: {res}"
+            )
             return res
         except SQLAlchemyError as e:
             logger.error(
                 f"Ошибка базы данных при получении адресов кошельков для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.WalletRetrievalError("Database error occurred.")
-        except err.WalletRetrievalError as e:
+            raise WalletRetrievalError("Database error occurred.")
+        except WalletRetrievalError as e:
             logger.warning(f"{e.message} для пользователя {user.id}")
             raise
         except Exception as e:
@@ -162,7 +177,7 @@ class WalletGet(Resource):
                 f"Не удалось получить адреса кошельков для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.WalletRetrievalError("Failed to get wallets.")
+            raise WalletRetrievalError("Failed to get wallets.")
 
 
 # ---------- /transfer_fee ----------
@@ -188,10 +203,12 @@ class TransferFee(Resource):
                 f"Произошла ошибка базы данных при получении комиссий за переводы: {e}",
                 exc_info=True,
             )
-            raise err.TransferFeeRetrievalError("Database error occurred.")
+            raise TransferFeeRetrievalError("Database error occurred.")
         except Exception as e:
-            logger.error(f"Не удалось получить комиссии за переводы: {e}", exc_info=True)
-            raise err.TransferFeeRetrievalError("Failed to get transfer fees.")
+            logger.error(
+                f"Не удалось получить комиссии за переводы: {e}", exc_info=True
+            )
+            raise TransferFeeRetrievalError("Failed to get transfer fees.")
 
 
 # ---------- /withdraw ----------
@@ -223,20 +240,22 @@ class Withdraw(Resource):
             )
             return {"status": tx.status.value, "transaction_id": tx.id}, 201
         except ValueError as e:
-            logger.warning(f"Некорректный запрос на вывод средств от пользователя {user.id}: {e}")
-            raise err.WithdrawError("Invalid request for withdrawal.")
+            logger.warning(
+                f"Некорректный запрос на вывод средств от пользователя {user.id}: {e}"
+            )
+            raise WithdrawError("Invalid request for withdrawal.")
         except SQLAlchemyError as e:
             logger.error(
                 f"Ошибка базы данных при выводе средств для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.WithdrawError("Database error occurred.")
+            raise WithdrawError("Database error occurred.")
         except Exception as e:
             logger.error(
                 f"Не удалось вывести средства для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.WithdrawError("Failed to withdraw funds.")
+            raise WithdrawError("Failed to withdraw funds.")
 
 
 # ---------- /balance ----------
@@ -261,20 +280,22 @@ class Balance(Resource):
                 "erc_balance": str(erc_balance),
                 # "trc_balance": str(trc_balance),
             }
-            logger.info(f"Баланс получен для пользователя {user.id}: {balances}")
+            logger.info(
+                f"Баланс получен для пользователя {user.id}: {balances}"
+            )
             return balances
         except SQLAlchemyError as e:
             logger.error(
                 f"Ошибка базы данных при получении баланса для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.BalanceError("Database error occurred.")
+            raise BalanceError("Database error occurred.")
         except Exception as e:
             logger.error(
                 f"Не удалось получить баланс для пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.BalanceError("Failed to get balance.")
+            raise BalanceError("Failed to get balance.")
 
 
 # ---------- /transactions ----------
@@ -298,7 +319,7 @@ class Transactions(Resource):
                 f"Ошибка при получении истории транзакций пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.TransactionError("Failed to get transaction history.")
+            raise TransactionError("Failed to get transaction history.")
 
 
 # ---------- /check_wallet ----------
@@ -334,14 +355,16 @@ class RefBal(Resource):
         user = User.query.get(get_jwt_identity())
         try:
             balance = svc.ref_balance(user)
-            logger.info(f"Баланс рефералов для пользователя {user.id}: {balance}")
+            logger.info(
+                f"Баланс рефералов для пользователя {user.id}: {balance}"
+            )
             return {"balance": str(balance)}
         except Exception as e:
             logger.error(
                 f"Ошибка при получении баланса рефералов пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.ReferralError("Failed to get referral balance.")
+            raise ReferralError("Failed to get referral balance.")
 
 
 # ---------- /referral_withdraw ----------
@@ -360,26 +383,34 @@ class RefWithdraw(Resource):
         try:
             amt = Decimal(ns.payload["amount"])
         except Exception:
-            logger.warning(f"Неверный формат суммы вывода рефералов от пользователя {user.id}")
+            logger.warning(
+                f"Неверный формат суммы вывода рефералов от пользователя {user.id}"
+            )
             ns.abort(400, "Invalid amount format")
 
         min_payout = Decimal(os.getenv("REF_MIN_PAYOUT", "10"))
         if amt < min_payout:
-            logger.warning(f"Сумма вывода рефералов меньше минимальной у пользователя {user.id}: {amt} < {min_payout}")
+            logger.warning(
+                f"Сумма вывода рефералов меньше минимальной у пользователя {user.id}: {amt} < {min_payout}"
+            )
             ns.abort(400, f"Amount below minimum payout {min_payout}")
 
         try:
             svc.ref_debit(user, amt)
             svc.debit(user, "erc", -amt)
-            logger.info(f"Успешный вывод рефералов у пользователя {user.id}, сумма: {amt}")
+            logger.info(
+                f"Успешный вывод рефералов у пользователя {user.id}, сумма: {amt}"
+            )
         except ValueError as e:
-            logger.warning(f"Ошибка вывода рефералов у пользователя {user.id}: {e}")
+            logger.warning(
+                f"Ошибка вывода рефералов у пользователя {user.id}: {e}"
+            )
             ns.abort(400, str(e))
         except Exception as e:
             logger.error(
                 f"Ошибка при выводе рефералов у пользователя {user.id}: {e}",
                 exc_info=True,
             )
-            raise err.ReferralError("Failed to withdraw referral funds.")
+            raise ReferralError("Failed to withdraw referral funds.")
 
         return {"status": "ok"}
