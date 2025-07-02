@@ -19,3 +19,9 @@ class Package(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     purchases = db.relationship("Purchase", back_populates="package")
+    properties = db.relationship(
+        "PackageProperty",
+        back_populates="package",
+        cascade="all, delete-orphan",
+        lazy="joined",
+    )
