@@ -18,7 +18,7 @@ _pkg = ns.model(
         "id": fields.Integer,
         "name": fields.String,
         "type": fields.String,
-        "price": fields.String,
+        "price_usdt": fields.String,
         "description": fields.String,
     },
 )
