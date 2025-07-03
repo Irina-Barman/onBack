@@ -2,8 +2,9 @@ import logging
 import time
 from decimal import Decimal
 from functools import lru_cache
-from typing import Dict, List, TypedDict
+from typing import Any, Dict, List, TypedDict
 
+from sqlalchemy.orm import joinedload
 from web3 import Web3
 
 from onfine.blockchain.providers import BEP20, ERC20, TRC20
@@ -40,15 +41,26 @@ class PurchaseResult(TypedDict):
     from_database: bool
 
 
-def list_packages() -> List[Package]:
-    """Возвращает список всех доступных пакетов.
-
-    Получает все пакеты из базы данных.
+def list_packages() -> List[Dict[str, Any]]:
+    """
+    Возвращает список всех доступных пакетов с подгруженными свойствами.
 
     Returns:
-        List[Package]: Список объектов Package.
+        List[Dict[str, Any]]: Список словарей с данными пакетов.
     """
-    return Package.query.all()
+    packages = Package.query.options(joinedload(Package.properties)).all()
+    result = []
+    for p in packages:
+        result.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "type": p.type,
+                "price_usdt": str(p.price_usdt),
+                "description": p.properties_description,
+            }
+        )
+    return result
 
 
 @lru_cache(maxsize=1)
@@ -92,13 +104,17 @@ def check_balance(user: User, network: str, amount: Decimal) -> None:
                 f"Недостаточно средств у пользователя {user.id} на сети {network}: "
                 f"требуется {amount}, доступно {balance}",
             )
-            raise InsufficientBalanceError("Insufficient balance for the purchase")
+            raise InsufficientBalanceError(
+                "Insufficient balance for the purchase"
+            )
     except Exception as e:
         logger.error(f"Ошибка при проверке баланса: {e}")
         raise
 
 
-def check_or_create_purchase(user: User, package_id: int, network: str) -> PurchaseResult:
+def check_or_create_purchase(
+    user: User, package_id: int, network: str
+) -> PurchaseResult:
     """
     Проверяет наличие ожидающей покупки или создает новую.
 
@@ -118,10 +134,14 @@ def check_or_create_purchase(user: User, package_id: int, network: str) -> Purch
     Returns:
         PurchaseResult: Словарь с объектом покупки и флагом источника данных.
     """
-    pending_purchase = Purchase.query.filter_by(user_id=user.id, status=PurchaseStatus.pending, network=network).first()
+    pending_purchase = Purchase.query.filter_by(
+        user_id=user.id, status=PurchaseStatus.pending, network=network
+    ).first()
 
     if pending_purchase:
-        logger.info(f"Найдена ожидающая покупка {pending_purchase.id} для пользователя {user.id} в сети {network}")
+        logger.info(
+            f"Найдена ожидающая покупка {pending_purchase.id} для пользователя {user.id} в сети {network}"
+        )
         return {"purchase": pending_purchase, "from_database": True}
 
     pkg = Package.query.get(package_id)
@@ -158,7 +178,9 @@ def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
     """
     fee = gas_table().get(network)
     if fee is None:
-        logger.error(f"Сеть {network} не найдена в таблице газовых цен при создании покупки")
+        logger.error(
+            f"Сеть {network} не найдена в таблице газовых цен при создании покупки"
+        )
         raise NetworkNotFoundError(f"Network {network} not found")
 
     purchase = Purchase(
@@ -173,7 +195,9 @@ def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
     with db.session.begin():
         db.session.add(purchase)
         db.session.flush()  # Чтобы получить purchase.id
-        logger.info(f"Создана покупка {purchase.id} для пользователя {user.id}")
+        logger.info(
+            f"Создана покупка {purchase.id} для пользователя {user.id}"
+        )
 
     return purchase
 
@@ -194,7 +218,9 @@ def process_purchase_confirmation(purchase_id: int) -> None:
     """
     p = Purchase.query.get(purchase_id)
     if not p:
-        logger.error(f"Покупка с id {purchase_id} не найдена при подтверждении")
+        logger.error(
+            f"Покупка с id {purchase_id} не найдена при подтверждении"
+        )
         raise ValueError(f"Purchase with id {purchase_id} not found")
 
     if not p.user:
@@ -227,13 +253,17 @@ def process_purchase_confirmation(purchase_id: int) -> None:
             else:
                 transaction.status = TxStatus.failed
                 p.status = PurchaseStatus.canceled
-                logger.warning(f"Покупка {purchase_id} отменена из-за неудачной транзакции")
+                logger.warning(
+                    f"Покупка {purchase_id} отменена из-за неудачной транзакции"
+                )
 
             # Отправка события Kafka
             send_kafka_event(p, success)
 
     except Exception as e:
-        logger.error(f"Ошибка при обработке подтверждения покупки {purchase_id}: {e}")
+        logger.error(
+            f"Ошибка при обработке подтверждения покупки {purchase_id}: {e}"
+        )
         raise  # Можно выбросить исключение, чтобы обработать его на уровне API
 
 
@@ -267,7 +297,9 @@ def send_kafka_event(purchase: Purchase, success: bool) -> None:
         )
         logger.info(f"Отправлено событие Kafka для покупки {purchase.id}")
     except Exception as e:
-        logger.error(f"Ошибка при отправке события Kafka для покупки {purchase.id}: {e}")
+        logger.error(
+            f"Ошибка при отправке события Kafka для покупки {purchase.id}: {e}"
+        )
         raise  # Можно выбросить исключение, чтобы обработать его на уровне API
 
 
@@ -290,7 +322,9 @@ def check_transaction_status(network: str, tx_id: str) -> bool:  # noqa: PLR0911
             # Используем Web3 для ERC20 и BEP20
             receipt = Web3.eth.get_transaction_receipt(tx_id)
             if receipt is None:
-                logger.warning(f"Транзакция {tx_id} еще не подтверждена или не найдена.")
+                logger.warning(
+                    f"Транзакция {tx_id} еще не подтверждена или не найдена."
+                )
                 return False
             return receipt.status == 1  # Статус 1 означает успех
 
@@ -314,7 +348,9 @@ def check_transaction_status(network: str, tx_id: str) -> bool:  # noqa: PLR0911
                 if contract_ret == "SUCCESS":
                     return True
                 else:
-                    logger.warning(f"Транзакция {tx_id} не успешна: {contract_ret}")
+                    logger.warning(
+                        f"Транзакция {tx_id} не успешна: {contract_ret}"
+                    )
                     return False
 
         else:
@@ -347,7 +383,9 @@ def confirm_transaction(transaction: Transaction) -> bool:  # noqa: PLR0911
     # Получаем кошелек пользователя для указанной сети
     wallet = Wallet.query.filter_by(user_id=user_id, network=network).first()
     if not wallet:
-        logger.error(f"Кошелек для пользователя {user_id} в сети {network} не найден")
+        logger.error(
+            f"Кошелек для пользователя {user_id} в сети {network} не найден"
+        )
         return False
 
     # Дешифруем приватный ключ кошелька
@@ -381,7 +419,9 @@ def confirm_transaction(transaction: Transaction) -> bool:  # noqa: PLR0911
                 logger.info(f"Транзакция {tx_id} подтверждена")
                 return True
             else:
-                logger.info(f"Ожидание подтверждения транзакции {tx_id} (попытка {attempt + 1})")
+                logger.info(
+                    f"Ожидание подтверждения транзакции {tx_id} (попытка {attempt + 1})"
+                )
 
         logger.warning(f"Транзакция {tx_id} не подтверждена после ожидания")
         return False
