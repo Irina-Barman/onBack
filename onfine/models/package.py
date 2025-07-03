@@ -23,7 +23,7 @@ class Package(db.Model):
     )
 
     @property
-    def properties_description(self) -> str | None:
+    def package_description(self) -> str | None:
         if not self.package_info:
             return None
         return ", ".join(
