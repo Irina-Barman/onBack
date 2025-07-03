@@ -3,7 +3,7 @@ from decimal import Decimal
 from onfine.app_factory import create_app
 from onfine.extensions import db
 from onfine.models.package import Package
-from onfine.models.package_info import PackageProperty
+from onfine.models.package_info import PackageInfo
 
 packages_info = {
     "Mini": {
@@ -82,12 +82,12 @@ def update_package_info():
             print(f"Пакет {package_name} не найден в базе, пропускаем")
             continue
 
-        existing_props = {p.key: p for p in pkg.properties}
+        existing_props = {p.key: p for p in pkg.package_info}
         for key, value in props.items():
             if key in existing_props:
                 existing_props[key].value = value
             else:
-                new_prop = PackageProperty(
+                new_prop = PackageInfo(
                     package_id=pkg.id, key=key, value=value
                 )
                 db.session.add(new_prop)

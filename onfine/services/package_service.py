@@ -48,7 +48,7 @@ def list_packages() -> List[Dict[str, Any]]:
     Returns:
         List[Dict[str, Any]]: Список словарей с данными пакетов.
     """
-    packages = Package.query.options(joinedload(Package.properties)).all()
+    packages = Package.query.options(joinedload(Package.package_info)).all()
     result = []
     for p in packages:
         result.append(
@@ -57,7 +57,7 @@ def list_packages() -> List[Dict[str, Any]]:
                 "name": p.name,
                 "type": p.type,
                 "price_usdt": str(p.price_usdt),
-                "description": p.properties_description,
+                "description": p.package_description,
             }
         )
     return result
