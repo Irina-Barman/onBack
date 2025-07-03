@@ -21,6 +21,13 @@ class Package(db.Model):
         cascade="all, delete-orphan",
         lazy="joined",
     )
+    package_property = db.relationship(
+        "PackageProperty",
+        back_populates="package",
+        cascade="all, delete-orphan",
+        uselist=False,  # один к одному
+        lazy="joined",
+    )
 
     @property
     def package_description(self) -> str | None:
