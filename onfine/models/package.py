@@ -4,6 +4,8 @@ from ..extensions import db
 
 
 class Package(db.Model):
+    """Модель инвестиционного пакета"""
+
     __tablename__ = "packages"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -14,6 +16,7 @@ class Package(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     purchases = db.relationship("Purchase", back_populates="package")
+    # description тут удалён, в сваг модели это поле наполняется из package_info
 
     package_info = db.relationship(
         "PackageInfo",
@@ -31,8 +34,13 @@ class Package(db.Model):
 
     @property
     def package_description(self) -> str | None:
+        """
+        Формирует строковое описание пакета на основе связанных ключ-значений из package_info.
+
+        Возвращает:
+            str | None: Конкатенированное описание в формате "ключ: значение", разделённое запятыми,
+                        либо None, если информация отсутствует.
+        """
         if not self.package_info:
             return None
-        return ", ".join(
-            f"{prop.key}: {prop.value}" for prop in self.package_info
-        )
+        return ", ".join(f"{prop.key}: {prop.value}" for prop in self.package_info)

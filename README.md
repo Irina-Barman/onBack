@@ -186,7 +186,7 @@ docker compose exec api python -m onfine.scripts.update_package_properties
 open http://localhost:5000/api/docs
 ```
 
-если необходимо 
+если необходимо
 ### 12. pre-commit
 ```python
 HOOK для проверки соответствия кода pep8

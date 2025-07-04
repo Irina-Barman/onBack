@@ -1,11 +1,15 @@
-from decimal import Decimal
+from typing import Dict, Optional
 
 from onfine.app_factory import create_app
 from onfine.extensions import db
 from onfine.models.package import Package
 from onfine.models.package_info import PackageInfo
 
-packages_info = {
+# Тип для словаря с ключами и значениями свойств пакета
+PackageProperties = Dict[str, str]
+
+# Словарь с информацией для каждого пакета
+packages_info: Dict[str, PackageProperties] = {  # type: ignore
     "Mini": {
         "Гарантированная доходность": "10% годовых",
         "Потенциальный доход": "До 20%",
@@ -75,9 +79,19 @@ packages_info = {
 }
 
 
-def update_package_info():
+def update_package_info() -> None:
+    """
+    Обновляет или добавляет свойства (ключ-значение) для каждого пакета из 'packages_info'.
+
+    Для каждого пакета из словаря:
+    - Если пакет не найден в базе, выводит предупреждение и пропускает.
+    - Если ключ свойства уже существует у пакета, обновляет значение.
+    - Если ключа нет, создаёт новую запись PackageInfo.
+
+    После обработки всех пакетов выполняет коммит транзакции.
+    """
     for package_name, props in packages_info.items():
-        pkg = Package.query.filter_by(name=package_name).first()
+        pkg: Optional[Package] = Package.query.filter_by(name=package_name).first()
         if not pkg:
             print(f"Пакет {package_name} не найден в базе, пропускаем")
             continue
@@ -87,9 +101,7 @@ def update_package_info():
             if key in existing_props:
                 existing_props[key].value = value
             else:
-                new_prop = PackageInfo(
-                    package_id=pkg.id, key=key, value=value
-                )
+                new_prop = PackageInfo(package_id=pkg.id, key=key, value=value)
                 db.session.add(new_prop)
 
     db.session.commit()

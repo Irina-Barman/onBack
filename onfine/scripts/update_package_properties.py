@@ -1,11 +1,21 @@
 from decimal import Decimal
+from typing import Dict, Optional, TypedDict
 
 from onfine.app_factory import create_app
 from onfine.extensions import db
 from onfine.models.package import Package
 from onfine.models.package_properties import PackageProperty
 
-packages_property = {
+
+class PackagePropertyData(TypedDict):
+    term_months: int
+    interest_rate_from: Decimal
+    interest_rate_to: Decimal
+    bonuses: str
+    target_audience: str
+
+
+packages_property: Dict[str, PackagePropertyData] = {
     "Mini": {
         "term_months": 6,
         "interest_rate_from": Decimal("10.00"),
@@ -20,7 +30,6 @@ packages_property = {
         "bonuses": "+ ежемесячный отчет",
         "target_audience": "Инвесторы с небольшим опытом",
     },
-
     "Basic": {
         "term_months": 12,
         "interest_rate_from": Decimal("12.00"),
@@ -87,23 +96,33 @@ packages_property = {
 }
 
 
-def update_package_property():
+def update_package_property() -> None:
+    """
+    Обновляет свойства пакетов (PackageProperty) в базе данных.
+
+    Для каждого пакета из `packages_property`:
+    - Ищет пакет в базе по имени.
+    - Если пакет не найден, выводит предупреждение и пропускает.
+    - Если у пакета нет связанных свойств (PackageProperty), создаёт новую запись.
+    - Обновляет поля свойства согласно данным из словаря.
+    - В конце коммитит изменения в базе.
+    """
     for package_name, props in packages_property.items():
-        pkg = Package.query.filter_by(name=package_name).first()
+        pkg: Optional[Package] = Package.query.filter_by(name=package_name).first()
         if not pkg:
             print(f"Пакет {package_name} не найден в базе, пропускаем")
             continue
 
-        prop = pkg.package_property
+        prop: Optional[PackageProperty] = pkg.package_property
         if not prop:
             prop = PackageProperty(package_id=pkg.id)
             db.session.add(prop)
 
-        prop.term_months = props.get("term_months")
-        prop.interest_rate_from = props.get("interest_rate_from")
-        prop.interest_rate_to = props.get("interest_rate_to")
-        prop.bonuses = props.get("bonuses")
-        prop.target_audience = props.get("target_audience")
+        prop.term_months = props["term_months"]
+        prop.interest_rate_from = props["interest_rate_from"]
+        prop.interest_rate_to = props["interest_rate_to"]
+        prop.bonuses = props["bonuses"]
+        prop.target_audience = props["target_audience"]
 
     db.session.commit()
     print("Свойства пакетов (PackageProperty) обновлены")
