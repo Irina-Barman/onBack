@@ -42,15 +42,14 @@ class PurchaseResult(TypedDict):
 
 
 def list_packages() -> List[Dict[str, Any]]:
-    """
-    Возвращает список всех доступных пакетов с подгруженными свойствами.
+    packages = Package.query.options(
+        joinedload(Package.package_info),
+        joinedload(Package.package_property),
+    ).all()
 
-    Returns:
-        List[Dict[str, Any]]: Список словарей с данными пакетов.
-    """
-    packages = Package.query.options(joinedload(Package.package_info)).all()
     result = []
     for p in packages:
+        prop = p.package_property
         result.append(
             {
                 "id": p.id,
@@ -58,6 +57,12 @@ def list_packages() -> List[Dict[str, Any]]:
                 "type": p.type,
                 "price_usdt": str(p.price_usdt),
                 "description": p.package_description,
+                # Добавляем поля из PackageProperty
+                "term_months": prop.term_months if prop else None,
+                "interest_rate_from": str(prop.interest_rate_from) if prop else None,
+                "interest_rate_to": str(prop.interest_rate_to) if prop else None,
+                "bonuses": prop.bonuses if prop else None,
+                "target_audience": prop.target_audience if prop else None,
             }
         )
     return result
