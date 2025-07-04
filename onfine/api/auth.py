@@ -117,7 +117,7 @@ class Register(Resource):
 
             user_exists = User.query.filter_by(email=email).first()
             if user_exists:
-                logger.warning(
+                logger.error(
                     f"Попытка регистрации с уже существующим email: {email}"
                 )
                 raise RegistrationError(
@@ -134,7 +134,7 @@ class Register(Resource):
                 "user_id": user.id,
             }, 200
         except ValueError as e:
-            logger.warning(f"Ошибка валидации при регистрации: {str(e)}")
+            logger.error(f"Ошибка валидации при регистрации: {str(e)}")
             raise RegistrationError(str(e))
 
 
@@ -215,7 +215,7 @@ class ForgotPassword(Resource):
                     f"Ошибка при отправке письма для сброса пароля на {email}: {str(e)}"
                 )
         else:
-            logger.warning(
+            logger.error(
                 f"Запрос на сброс пароля для несуществующего email: {email}"
             )
 
