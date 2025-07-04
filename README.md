@@ -178,8 +178,10 @@ docker compose exec api flask db upgrade
 
 # Запускаем скрипт наполнения пакетов
 docker compose exec api python -m onfine.scripts.update_package
-# Запускаем скрипт наполнения дополнения пакетов(пропети)
+# Запускаем скрипт наполнения информации о пакетах(текстовая информация )
 docker compose exec api python -m onfine.scripts.update_info
+# Запускаем скрипт наполнения проперти пакетов(условия в числовом и текствовом формате)
+docker compose exec api python -m onfine.scripts.update_package_properties
 
 open http://localhost:5000/api/docs
 ```
