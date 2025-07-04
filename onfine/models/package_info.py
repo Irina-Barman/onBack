@@ -2,7 +2,16 @@ from ..extensions import db
 
 
 class PackageInfo(db.Model):
-    """Дополнительные свойства пакетов"""
+    """
+    Модель дополнительных свойств пакетов.
+
+    Атрибуты:
+        id (int): Уникальный идентификатор записи.
+        package_id (int): Внешний ключ на пакет.
+        key (str): Ключ свойства.
+        value (str): Значение свойства.
+        package (Optional[Package]): Связанный объект пакета.
+    """
 
     __tablename__ = "package_info"
 
