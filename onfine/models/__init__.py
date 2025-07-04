@@ -6,6 +6,7 @@ from .mining_profit_batch import MiningProfitBatch
 from .network_gas import NetworkGas
 from .package import Package
 from .package_info import PackageInfo
+from .package_properties import PackageProperty
 from .purchase import Purchase
 from .referral_balance import ReferralBalance
 from .referral_level import ReferralLevel
@@ -27,6 +28,7 @@ __all__ = [
     "NetworkGas",
     "Package",
     "PackageInfo",
+    "PackageProperty",
     "Purchase",
     "ReferralBalance",
     "ReferralLevel",
