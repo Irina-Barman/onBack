@@ -18,8 +18,14 @@ _pkg = ns.model(
         "id": fields.Integer,
         "name": fields.String,
         "type": fields.String,
-        "price": fields.String,
+        "price_usdt": fields.String,
         "description": fields.String,
+        # Добавляем поля из PackageProperty
+        "term_months": fields.Integer,
+        "interest_rate_from": fields.String,
+        "interest_rate_to": fields.String,
+        "bonuses": fields.String,
+        "target_audience": fields.String,
     },
 )
 

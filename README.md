@@ -161,6 +161,7 @@ docker compose up -d api
 git clone …
 cd onfine-back
 cp .env.example .env        # заполните ключи
+# docker compose build --no-cache (чтобы сбилдить без кэша)
 docker compose up -d --build
 docker compose exec api flask db init
    # Появится директория migrations, а ней файл onfine_back\migrations\*alembic.ini* . В него в самый вверх воткнуть
@@ -174,10 +175,18 @@ sqlalchemy.url = тут_URL_базы_данных
 # Закрыть alembic и продолжить в терминале:
 docker compose exec api flask db migrate -m "Добавление миграций"
 docker compose exec api flask db upgrade
+
+# Запускаем скрипт наполнения пакетов
+docker compose exec api python -m onfine.scripts.update_package
+# Запускаем скрипт наполнения информации о пакетах(текстовая информация )
+docker compose exec api python -m onfine.scripts.update_info
+# Запускаем скрипт наполнения проперти пакетов(условия в числовом и текствовом формате)
+docker compose exec api python -m onfine.scripts.update_package_properties
+
 open http://localhost:5000/api/docs
 ```
 
-
+если необходимо
 ### 12. pre-commit
 ```python
 HOOK для проверки соответствия кода pep8
@@ -187,5 +196,7 @@ pre-commit install
 перед каждым пушем изменений в удаленный репозиторий требуется запустить:
 pre-commit run --all-files
 ```
+
+
 Вы готовы тестировать: создавайте пользователя, инвестируйте, запускайте
 `round_cron` вручную и проверяйте, как приходят профиты.

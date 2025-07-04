@@ -2,8 +2,9 @@ import logging
 import time
 from decimal import Decimal
 from functools import lru_cache
-from typing import Dict, List, TypedDict
+from typing import Any, Dict, List, TypedDict
 
+from sqlalchemy.orm import joinedload
 from web3 import Web3
 
 from onfine.blockchain.providers import BEP20, ERC20, TRC20
@@ -40,15 +41,40 @@ class PurchaseResult(TypedDict):
     from_database: bool
 
 
-def list_packages() -> List[Package]:
-    """Возвращает список всех доступных пакетов.
+def list_packages() -> List[Dict[str, Any]]:
+    """
+    Получает список всех пакетов с их основными атрибутами и свойствами.
 
-    Получает все пакеты из базы данных.
+    Использует жадную загрузку (joinedload) для оптимизации запросов к связанным таблицам.
 
     Returns:
-        List[Package]: Список объектов Package.
+        List[Dict[str, Any]]: Список словарей с данными по каждому пакету,
+        включая свойства из PackageProperty.
     """
-    return Package.query.all()
+    packages: List[Package] = Package.query.options(
+        joinedload(Package.package_info),
+        joinedload(Package.package_property),
+    ).all()
+
+    result: List[Dict[str, Any]] = []
+    for p in packages:
+        prop = p.package_property
+        result.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "type": p.type,
+                "price_usdt": str(p.price_usdt),
+                "description": p.package_description,  # данные из PackageInfo
+                # Свойства пакета, если они есть
+                "term_months": prop.term_months if prop else None,
+                "interest_rate_from": str(prop.interest_rate_from) if prop else None,
+                "interest_rate_to": str(prop.interest_rate_to) if prop else None,
+                "bonuses": prop.bonuses if prop else None,
+                "target_audience": prop.target_audience if prop else None,
+            },
+        )
+    return result
 
 
 @lru_cache(maxsize=1)
