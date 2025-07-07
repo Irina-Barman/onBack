@@ -5,11 +5,11 @@ import jwt
 from flask import current_app, g, request
 from flask_restx import Namespace, Resource, fields
 
-user_ns = Namespace("User", description="User-related operations")
+user_ns = Namespace("user", description="User-related operations")
 
 # Модель ответа для Swagger
 user_model = user_ns.model(
-    "User",
+    "user",
     {
         "email": fields.String,
         "isEmailConfirmed": fields.Boolean(attribute="is_email_confirmed"),

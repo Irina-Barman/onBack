@@ -28,4 +28,11 @@ def create_app() -> Flask:
     jwt.init_app(app)
 
     register_namespaces(app)
+
+    # Запуск WebSocket-листенеров после инициализации db
+
+    from onfine.services.websocket_listener import start_websocket_listeners
+
+    start_websocket_listeners(db.session)
+
     return app

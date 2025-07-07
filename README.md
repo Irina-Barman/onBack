@@ -200,3 +200,32 @@ pre-commit run --all-files
 
 Вы готовы тестировать: создавайте пользователя, инвестируйте, запускайте
 `round_cron` вручную и проверяйте, как приходят профиты.
+
+### 13. Kafka
+Автоинициализация не работает без zookeeper
+Топики создаются при первой отправке сообщения, чтобы работать с тестовыми топиками, требуется вручную из контейнера создать топики.
+```
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic balance_updates
+
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic erc20_transfers
+
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic bep20_transfers
+
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic trc20_transfers
+```

@@ -14,60 +14,85 @@ import json
 import logging
 import os
 import time
+from typing import Any, Dict, Optional
 
 from kafka import KafkaProducer
-from kafka.errors import KafkaError
+from kafka.errors import KafkaError, KafkaTimeoutError
 
 logger = logging.getLogger(__name__)
-_producer: KafkaProducer | None = None
+_producer: Optional[KafkaProducer] = None
 
 
-def _get_producer() -> KafkaProducer | None:
+def _get_producer(retries: int = 3) -> Optional[KafkaProducer]:
+    """Инициализация продюсера с ретраями."""
     global _producer
     if _producer is not None:
         return _producer
 
     bootstrap = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-    try:
-        p = KafkaProducer(
-            bootstrap_servers=bootstrap,
-            value_serializer=lambda d: json.dumps(d).encode(),
-        )
-        # Проверим сразу, что подключились
-        if p.bootstrap_connected():
-            _producer = p
-            logger.info(f"KafkaProducer initialized, bootstrap={bootstrap}")
-        else:
-            logger.error(f"Failed to connect to Kafka broker at {bootstrap}")
-            _producer = None
-    except KafkaError as e:
-        logger.error(f"Cannot connect to Kafka broker at {bootstrap}: {e}")
-        _producer = None
-    return _producer
+    for attempt in range(retries):
+        try:
+            producer = KafkaProducer(
+                bootstrap_servers=bootstrap,
+                value_serializer=lambda d: json.dumps(d).encode("utf-8"),
+                acks="all",  # Ждём подтверждения от всех реплик
+                retries=3,  # Ретраи на уровне клиента
+            )
+            if producer.bootstrap_connected():
+                _producer = producer
+                logger.info(f"Connected to Kafka at {bootstrap}")
+                return _producer
+        except KafkaError as e:
+            logger.error(f"Attempt {attempt + 1}: Kafka connection failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(2)
+
+    logger.critical("All Kafka connection attempts failed!")
+    return None
 
 
-def send(topic: str, data: dict, retries: int = 5, backoff: int = 2) -> bool:
+def send(
+    topic: str,
+    data: Dict[str, Any],
+    retries: int = 3,
+    backoff: float = 1.0,
+) -> bool:
     """
-    Отправить сообщение в Kafka.
-    Возвращает True, если удалось запланировать отправку, False иначе.
+    Отправляет сообщение в Kafka топик.
+
+    Args:
+        topic: Название топика.
+        data: Данные для отправки (словарь).
+        retries: Количество попыток при ошибке.
+        backoff: Задержка между попытками (сек).
+
+    Returns:
+        bool: Успешно ли отправлено.
     """
-    p = _get_producer()
-    if not p:
-        logger.warning(f"KafkaProducer unavailable, dropping message to '{topic}': {data}")
+    producer = _get_producer()
+    if not producer:
+        logger.error(f"Producer unavailable. Dropping message to {topic}: {data}")
         return False
 
     for attempt in range(retries):
         try:
-            # Отправка сообщения
-            p.send(topic, data)
-            p.flush()  # Дожидаемся завершения отправки
-            logger.info(f"Message sent to '{topic}': {data}")
+            future = producer.send(topic, data)
+            future.get(timeout=10.0)  # Блокируемся до подтверждения
+            logger.debug(f"Message sent to {topic}: {data}")
             return True
+        except KafkaTimeoutError as e:
+            logger.warning(f"Timeout sending to {topic} (attempt {attempt + 1}): {e}")
         except KafkaError as e:
-            logger.error(f"Failed to send to Kafka topic '{topic}' on attempt {attempt + 1}: {e}")
-            if attempt < retries - 1:
-                logger.info(f"Retrying in {backoff} seconds...")
-                time.sleep(backoff)
-            else:
-                logger.error(f"Exceeded maximum retries for topic '{topic}'. Message dropped: {data}")
-                return False
+            logger.error(f"Failed to send to {topic} (attempt {attempt + 1}): {e}")
+
+        if attempt < retries - 1:
+            time.sleep(backoff)
+
+    logger.error(f"Message dropped after {retries} retries: {data}")
+    return False
+
+
+def flush() -> None:
+    """Принудительно отправить все буферизованные сообщения."""
+    if _producer:
+        _producer.flush()

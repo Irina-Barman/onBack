@@ -1,11 +1,17 @@
+import logging
+
 from flask import Blueprint, Flask
 from flask_restx import Api
 
 from .auth import auth_ns
 from .emcd import ns as emcd_ns
 from .equipment import ns as equipment_ns
+from .kafka import kafka_ns
 from .package import ns as package_ns
+from .user import user_ns
 from .wallet import ns as wallet_ns
+
+logging.getLogger("pkg_resources").setLevel(logging.WARNING)
 
 # 🔐 Swagger поддержка JWT токена
 authorizations = {
@@ -35,5 +41,7 @@ def register_namespaces(app: Flask) -> None:  # noqa D103
     api.add_namespace(wallet_ns)
     api.add_namespace(emcd_ns, path="/emcd")
     api.add_namespace(equipment_ns, path="/equipment")
+    api.add_namespace(kafka_ns)
+    api.add_namespace(user_ns)
 
     app.register_blueprint(bp)

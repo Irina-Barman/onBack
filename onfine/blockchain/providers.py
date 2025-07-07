@@ -70,11 +70,8 @@ class TokenNetwork(ABC):
 
 # ------------------------------------------------------------------ ERC-20
 class ERC20(TokenNetwork):
-    infura_key = os.getenv("INFURA_API_KEY")
-    w3 = Web3(Web3.HTTPProvider(f"https://mainnet.infura.io/v3/{infura_key}"))
-    contract_addr = Web3.to_checksum_address(
-        "0xdAC17F958D2ee523a2206206994597C13D831ec7",
-    )
+    w3 = Web3(Web3.HTTPProvider(os.getenv("ERC_URL")))
+    contract_addr = Web3.to_checksum_address(os.getenv("USDT_ERC_CONTRACT_ADDR"))
 
     @staticmethod
     def _contract(abi: list) -> Contract:
@@ -206,10 +203,8 @@ class ERC20(TokenNetwork):
 
 # ------------------------------------------------------------------ BEP-20
 class BEP20(TokenNetwork):
-    w3 = Web3(Web3.HTTPProvider("https://bsc-dataseed.binance.org"))
-    contract_addr = Web3.to_checksum_address(
-        "0x55d398326f99059fF775485246999027B3197955",
-    )
+    w3 = Web3(Web3.HTTPProvider(os.getenv("BEP_URL")))
+    contract_addr = Web3.to_checksum_address(os.getenv("USDT_BEP_CONTRACT_ADDR"))
 
     @staticmethod
     def _contract(abi: List[dict]) -> Contract:
@@ -344,7 +339,7 @@ class BEP20(TokenNetwork):
 # ------------------------------------------------------------------ TRC-20
 class TRC20(TokenNetwork):
     client = Tron()
-    contract_addr = "TXYZopYRdj2D9XRtbG411XZZ3kM5VkAeBf"
+    contract_addr = os.getenv("USDT_TRC_CONTRACT_ADDR")
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
