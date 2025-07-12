@@ -6,6 +6,7 @@ from typing import List, Tuple
 from cryptography.fernet import Fernet
 from tronpy import Tron
 from tronpy.keys import PrivateKey
+from tronpy.providers import HTTPProvider
 from web3 import Web3
 from web3.contract import Contract
 
@@ -338,16 +339,19 @@ class BEP20(TokenNetwork):
 
 # ------------------------------------------------------------------ TRC-20
 class TRC20(TokenNetwork):
-    client = Tron()
+    client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
     contract_addr = os.getenv("USDT_TRC_CONTRACT_ADDR")
+    decimals = 6
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """
-        Создает новый кошелек и Return адрес и приватный ключ.
+        Создает новый TRON кошелек.
 
         Returns:
-            Tuple[str, str]: Кортеж с адресом и приватным ключом.
+            Tuple[str, str]: Кортеж из двух строк:
+                - base58check адрес кошелька,
+                - приватный ключ в шестнадцатеричном формате.
         """
         acc = TRC20.client.generate_address()
         return acc["base58check_address"], acc["private_key"]
@@ -355,64 +359,83 @@ class TRC20(TokenNetwork):
     @staticmethod
     def balance(addr: str) -> Decimal:
         """
-        Получает баланс токенов по адресу.
+        Получает баланс TRC20 токенов для указанного адреса.
 
         Args:
-            addr (str): Адрес кошелька.
+            addr (str): Адрес TRON кошелька (base58check формат).
 
         Returns:
-            Decimal: Баланс токенов.
+            Decimal: Баланс токенов с учётом десятичных знаков.
         """
-        contract = TRC20.client.get_contract(TRC20.contract_addr)
-        bal = contract.functions.balanceOf(addr)
-        return Decimal(bal) / (10**TRC20.decimals)
+        try:
+            contract = TRC20.client.get_contract(TRC20.contract_addr)
+            bal = contract.functions.balanceOf(addr).call()
+            return Decimal(bal) / (10**TRC20.decimals)
+        except Exception as e:
+            print(f"Error getting TRC20 balance for {addr}: {e}")
+            return Decimal(0)
 
     @staticmethod
     def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
         """
-        Оценивает комиссию за перевод токенов.
+        Оценивает комиссию за перевод TRC20 токенов.
 
         Args:
-            pk (str): Приватный ключ отправителя в шестнадцатеричном формате.
-            amount (Decimal): Сумма перевода.
-            to_addr (str): Адрес получателя.
+            pk (str): Приватный ключ отправителя в hex формате.
+            amount (Decimal): Сумма перевода токенов.
+            to_addr (str): Адрес получателя (base58check формат).
 
         Returns:
-            Decimal: Оцененная комиссия.
+            Decimal: Оцененная комиссия в TRX.
         """
         priv = PrivateKey(bytes.fromhex(pk))
+        contract = TRC20.client.get_contract(TRC20.contract_addr)
+
+        # Формируем транзакцию вызова transfer с лимитом комиссии (fee_limit)
         txn = (
-            TRC20.client.trx.transfer(
-                priv.public_key.to_base58check_address(),
+            contract.functions.transfer(
                 to_addr,
                 int(amount * (10**TRC20.decimals)),
             )
+            .with_owner(priv.public_key.to_base58check_address())
+            .fee_limit(10_000_000)  # 10 TRX в сун (1 TRX = 1_000_000 сун)
             .build()
-            .inspect()
         )
-        return Decimal(txn.fee) / (10**6)
+        # Возвращаем fee_limit в TRX
+        return Decimal(txn.fee_limit) / Decimal(1_000_000)
 
     @staticmethod
     def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
-        """Переводит токены на указанный адрес.
+        """
+        Выполняет перевод TRC20 токенов на указанный адрес.
 
         Args:
-            pk (str): Приватный ключ отправителя в шестнадцатеричном формате.
-            to_addr (str): Адрес получателя.
-            amount (Decimal): Сумма перевода.
+            pk (str): Приватный ключ отправителя в hex формате.
+            to_addr (str): Адрес получателя (base58check формат).
+            amount (Decimal): Сумма перевода токенов.
 
         Returns:
-            str: ID транзакции.
+            str: ID транзакции (txid).
+
+        Raises:
+            Exception: Если транзакция не была успешно отправлена.
         """
         priv = PrivateKey(bytes.fromhex(pk))
-        tx = (
-            TRC20.client.trx.transfer(
-                priv.public_key.to_base58check_address(),
+        contract = TRC20.client.get_contract(TRC20.contract_addr)
+
+        txn = (
+            contract.functions.transfer(
                 to_addr,
                 int(amount * (10**TRC20.decimals)),
             )
+            .with_owner(priv.public_key.to_base58check_address())
+            .fee_limit(10_000_000)
             .build()
             .sign(priv)
-            .broadcast()
         )
-        return tx["txid"]
+
+        result = txn.broadcast()
+        if not result["result"]:
+            raise Exception(f"TRC20 transfer failed: {result}")
+
+        return result["txid"]

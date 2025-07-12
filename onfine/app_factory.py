@@ -33,6 +33,6 @@ def create_app() -> Flask:
 
     from onfine.services.websocket_listener import start_websocket_listeners
 
-    start_websocket_listeners(db.session)
+    start_websocket_listeners(app, db.session)
 
     return app

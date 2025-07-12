@@ -264,11 +264,11 @@ class Balance(Resource):
         try:
             bep_balance = svc.get_real_balance(user, "bep")
             erc_balance = svc.get_real_balance(user, "erc")
-            # trc_balance = svc.get_real_balance(user, "trc")
+            trc_balance = svc.get_real_balance(user, "trc")
             balances = {
                 "bep_balance": str(bep_balance),
                 "erc_balance": str(erc_balance),
-                # "trc_balance": str(trc_balance),
+                "trc_balance": str(trc_balance),
             }
             logger.info(f"Баланс получен для пользователя {user.id}: {balances}")
             return balances
