@@ -1,8 +1,11 @@
+import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from typing import List, Tuple
 
+import jwt
 from cryptography.fernet import Fernet
 from tronpy import Tron
 from tronpy.keys import PrivateKey
@@ -11,6 +14,9 @@ from web3 import Web3
 from web3.contract import Contract
 
 FERNET = Fernet(os.getenv("FERNET_KEY").encode())
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 
 # ---------------------------------------------------------------------- base
@@ -72,7 +78,9 @@ class TokenNetwork(ABC):
 # ------------------------------------------------------------------ ERC-20
 class ERC20(TokenNetwork):
     w3 = Web3(Web3.HTTPProvider(os.getenv("ERC_URL")))
-    contract_addr = Web3.to_checksum_address(os.getenv("USDT_ERC_CONTRACT_ADDR"))
+    contract_addr = Web3.to_checksum_address(
+        os.getenv("USDT_ERC_CONTRACT_ADDR")
+    )
 
     @staticmethod
     def _contract(abi: list) -> Contract:
@@ -118,7 +126,11 @@ class ERC20(TokenNetwork):
         ]
 
         # Получение баланса
-        bal = ERC20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
+        bal = (
+            ERC20._contract(abi)
+            .functions.balanceOf(Web3.to_checksum_address(addr))
+            .call()
+        )
         return Decimal(bal) / (10**ERC20.decimals)
 
     # ---------- gas ----------
@@ -205,7 +217,9 @@ class ERC20(TokenNetwork):
 # ------------------------------------------------------------------ BEP-20
 class BEP20(TokenNetwork):
     w3 = Web3(Web3.HTTPProvider(os.getenv("BEP_URL")))
-    contract_addr = Web3.to_checksum_address(os.getenv("USDT_BEP_CONTRACT_ADDR"))
+    contract_addr = Web3.to_checksum_address(
+        os.getenv("USDT_BEP_CONTRACT_ADDR")
+    )
 
     @staticmethod
     def _contract(abi: List[dict]) -> Contract:
@@ -251,7 +265,11 @@ class BEP20(TokenNetwork):
                 "type": "function",
             },
         ]
-        bal = BEP20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
+        bal = (
+            BEP20._contract(abi)
+            .functions.balanceOf(Web3.to_checksum_address(addr))
+            .call()
+        )
         return Decimal(bal) / (10**BEP20.decimals)
 
     @staticmethod
@@ -338,104 +356,178 @@ class BEP20(TokenNetwork):
 
 
 # ------------------------------------------------------------------ TRC-20
+
+
+class TronGridJWT:
+    def __init__(
+        self, private_key_path: str, kid: str, expire_seconds: int = 3600
+    ):
+        self.private_key_path = private_key_path
+        self.kid = kid
+        self.expire_seconds = expire_seconds
+        self._load_private_key()
+
+    def _load_private_key(self):
+        with open(self.private_key_path, "rb") as f:
+            self.private_key = f.read()
+
+    def generate_token(self) -> str:
+        now = int(time.time())
+        payload = {
+            "aud": "trongrid.io",
+            "exp": now + self.expire_seconds,
+        }
+        headers = {
+            "alg": "RS256",
+            "typ": "JWT",
+            "kid": self.kid,
+        }
+        token = jwt.encode(
+            payload,
+            self.private_key,
+            algorithm="RS256",
+            headers=headers,
+        )
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+        return token
+
+
+class LoggingHTTPProvider(HTTPProvider):
+    def __init__(self, endpoint_uri=None, headers=None, **kwargs):
+        super().__init__(endpoint_uri=endpoint_uri, **kwargs)
+        self._default_headers = headers or {}
+
+    def request(
+        self, method: str, path: str, params=None, data=None, headers=None
+    ):
+        # Объединяем дефолтные заголовки и переданные в вызове
+        combined_headers = dict(self._default_headers)
+        if headers:
+            combined_headers.update(headers)
+
+        logger.info(f"HTTP {method} {self.endpoint_uri}{path}")
+        logger.info(f"Headers sent: {combined_headers}")
+        logger.info(f"Params: {params}")
+        logger.info(f"Data: {data}")
+
+        response = super().request(
+            method, path, params, data, combined_headers
+        )
+
+        logger.info(f"Response status: {response.status_code}")
+        logger.info(f"Response headers: {response.headers}")
+        logger.info(f"Response body: {response.text}")
+
+        return response
+
+
 class TRC20(TokenNetwork):
-    client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
     contract_addr = os.getenv("USDT_TRC_CONTRACT_ADDR")
     decimals = 6
 
-    @staticmethod
-    def generate_wallet() -> Tuple[str, str]:
-        """
-        Создает новый TRON кошелек.
+    # Для JWT авторизации
+    _jwt_token = None
+    _jwt_expire_at = 0
 
-        Returns:
-            Tuple[str, str]: Кортеж из двух строк:
-                - base58check адрес кошелька,
-                - приватный ключ в шестнадцатеричном формате.
-        """
-        acc = TRC20.client.generate_address()
+    # Приватный ключ и kid для JWT
+    _jwt_private_key_path = os.getenv(
+        "TRONGRID_PRIVATE_KEY_PATH", "private.pem"
+    )
+    _jwt_kid = os.getenv("TRONGRID_KID")
+
+    @classmethod
+    def _get_jwt_token(cls) -> str:
+        now = int(time.time())
+        # Если токен еще действителен, возвращаем его
+        if (
+            cls._jwt_token and now < cls._jwt_expire_at - 60
+        ):  # обновляем за 1 минуту до истечения
+            return cls._jwt_token
+
+        # Иначе генерируем новый токен
+        jwt_gen = TronGridJWT(
+            private_key_path=cls._jwt_private_key_path,
+            kid=cls._jwt_kid,
+            expire_seconds=3600,
+        )
+        cls._jwt_token = jwt_gen.generate_token()
+        cls._jwt_expire_at = now + 3600
+        logger.info("Generated new TronGrid JWT token")
+        return cls._jwt_token
+
+    @classmethod
+    def _create_client(cls) -> Tron:
+        token = cls._get_jwt_token()
+        api_key = os.getenv("TRON_PRO_API_KEY")
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "TRON-PRO-API-KEY": api_key,
+            "Content-Type": "application/json",
+        }
+        provider = LoggingHTTPProvider(
+            endpoint_uri="https://api.trongrid.io",
+            headers=headers,
+        )
+        return Tron(provider=provider)
+
+    @classmethod
+    def generate_wallet(cls) -> Tuple[str, str]:
+        client = cls._create_client()
+        acc = client.generate_address()
         return acc["base58check_address"], acc["private_key"]
 
-    @staticmethod
-    def balance(addr: str) -> Decimal:
-        """
-        Получает баланс TRC20 токенов для указанного адреса.
-
-        Args:
-            addr (str): Адрес TRON кошелька (base58check формат).
-
-        Returns:
-            Decimal: Баланс токенов с учётом десятичных знаков.
-        """
+    @classmethod
+    def balance(cls, addr: str) -> Decimal:
         try:
-            contract = TRC20.client.get_contract(TRC20.contract_addr)
+            client = cls._create_client()
+            contract = client.get_contract(cls.contract_addr)
             bal = contract.functions.balanceOf(addr).call()
-            return Decimal(bal) / (10**TRC20.decimals)
+            return Decimal(bal) / (10**cls.decimals)
         except Exception as e:
-            print(f"Error getting TRC20 balance for {addr}: {e}")
+            logger.error(f"Error getting TRC20 balance for {addr}: {e}")
             return Decimal(0)
 
-    @staticmethod
-    def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
-        """
-        Оценивает комиссию за перевод TRC20 токенов.
-
-        Args:
-            pk (str): Приватный ключ отправителя в hex формате.
-            amount (Decimal): Сумма перевода токенов.
-            to_addr (str): Адрес получателя (base58check формат).
-
-        Returns:
-            Decimal: Оцененная комиссия в TRX.
-        """
-        priv = PrivateKey(bytes.fromhex(pk))
-        contract = TRC20.client.get_contract(TRC20.contract_addr)
-
-        # Формируем транзакцию вызова transfer с лимитом комиссии (fee_limit)
-        txn = (
-            contract.functions.transfer(
-                to_addr,
-                int(amount * (10**TRC20.decimals)),
+    @classmethod
+    def estimate_fee(cls, pk: str, amount: Decimal, to_addr: str) -> Decimal:
+        try:
+            priv = PrivateKey(bytes.fromhex(pk))
+            client = cls._create_client()
+            contract = client.get_contract(cls.contract_addr)
+            txn = (
+                contract.functions.transfer(
+                    to_addr,
+                    int(amount * (10**cls.decimals)),
+                )
+                .with_owner(priv.public_key.to_base58check_address())
+                .fee_limit(10_000_000)
+                .build()
             )
-            .with_owner(priv.public_key.to_base58check_address())
-            .fee_limit(10_000_000)  # 10 TRX в сун (1 TRX = 1_000_000 сун)
-            .build()
-        )
-        # Возвращаем fee_limit в TRX
-        return Decimal(txn.fee_limit) / Decimal(1_000_000)
+            return Decimal(txn.fee_limit) / Decimal(1_000_000)
+        except Exception as e:
+            logger.error(f"Error estimating fee: {e}")
+            return Decimal(0)
 
-    @staticmethod
-    def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
-        """
-        Выполняет перевод TRC20 токенов на указанный адрес.
-
-        Args:
-            pk (str): Приватный ключ отправителя в hex формате.
-            to_addr (str): Адрес получателя (base58check формат).
-            amount (Decimal): Сумма перевода токенов.
-
-        Returns:
-            str: ID транзакции (txid).
-
-        Raises:
-            Exception: Если транзакция не была успешно отправлена.
-        """
-        priv = PrivateKey(bytes.fromhex(pk))
-        contract = TRC20.client.get_contract(TRC20.contract_addr)
-
-        txn = (
-            contract.functions.transfer(
-                to_addr,
-                int(amount * (10**TRC20.decimals)),
+    @classmethod
+    def transfer(cls, pk: str, to_addr: str, amount: Decimal) -> str:
+        try:
+            priv = PrivateKey(bytes.fromhex(pk))
+            client = cls._create_client()
+            contract = client.get_contract(cls.contract_addr)
+            txn = (
+                contract.functions.transfer(
+                    to_addr,
+                    int(amount * (10**cls.decimals)),
+                )
+                .with_owner(priv.public_key.to_base58check_address())
+                .fee_limit(10_000_000)
+                .build()
+                .sign(priv)
             )
-            .with_owner(priv.public_key.to_base58check_address())
-            .fee_limit(10_000_000)
-            .build()
-            .sign(priv)
-        )
-
-        result = txn.broadcast()
-        if not result["result"]:
-            raise Exception(f"TRC20 transfer failed: {result}")
-
-        return result["txid"]
+            result = txn.broadcast()
+            if not result["result"]:
+                raise Exception(f"TRC20 transfer failed: {result}")
+            return result["txid"]
+        except Exception as e:
+            logger.error(f"Error during TRC20 transfer: {e}")
+            raise

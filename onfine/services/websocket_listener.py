@@ -22,6 +22,8 @@ from web3.middleware import geth_poa_middleware
 from onfine.app_factory import create_app
 from onfine.models.wallet import Wallet
 from onfine.utils.tron_utils import from_hex_address, normalize_tron_address
+from onfine.blockchain.providers import TRC20
+
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -311,8 +313,7 @@ class TronPollingListener:
         self.network = network
         self.app = app
         self.db_session = db_session
-        self.provider = HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY"))
-        self.client = Tron(provider=self.provider)
+        self.client = TRC20._create_client()
         self.contract_addr = os.getenv("USDT_TRC_CONTRACT_ADDR")  # Base58 адрес контракта TRC20 (например, "T...")
         self.topic = "balance_updates"
 
