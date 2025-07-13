@@ -18,6 +18,7 @@ class PackageProperty(db.Model):
         created_at (datetime): Дата и время создания записи.
         package (Optional[Package]): Связанный объект пакета.
     """
+
     __tablename__ = "package_properties"
 
     id = db.Column(db.Integer, primary_key=True)

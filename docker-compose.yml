@@ -5,6 +5,7 @@ services:
     env_file: .env
     volumes:
       - .:/app
+      # - ./onfine/private.pem:/app/onfine/private.pem:ro
     depends_on:
       db:
         condition: service_healthy

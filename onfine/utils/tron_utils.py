@@ -36,9 +36,7 @@ def from_hex_address(hex_addr: str) -> str:
 
     addr_bytes = bytes.fromhex(hex_addr)
     prefix = b"\x41"  # префикс TRON mainnet
-    addr = (
-        prefix + addr_bytes[-20:]
-    )  # берем последние 20 байт адреса (20 байт - длина адреса TRON)
+    addr = prefix + addr_bytes[-20:]  # берем последние 20 байт адреса (20 байт - длина адреса TRON)
     hash0 = hashlib.sha256(addr).digest()
     hash1 = hashlib.sha256(hash0).digest()
     checksum = hash1[:4]  # первые 4 байта двойного sha256 - контрольная сумма

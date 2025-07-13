@@ -27,6 +27,7 @@ eth-rlp==2.2.0
 eth-typing==5.2.1
 eth-utils==5.3.0
 eth_abi==5.2.0
+fasteners==0.19
 filelock==3.18.0
 Flask==2.3.3
 Flask-JWT-Extended==4.6.0
@@ -86,3 +87,4 @@ web3==6.10.0
 websockets==14.2
 Werkzeug==2.3.8
 yarl==1.20.1
+

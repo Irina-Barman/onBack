@@ -372,7 +372,7 @@ class TRC20(TokenNetwork):
             bal = contract.functions.balanceOf(addr).call()
             return Decimal(bal) / (10**TRC20.decimals)
         except Exception as e:
-            print(f"Error getting TRC20 balance for {addr}: {e}")
+            print(f"Error getting TRC20 balance for {addr}: {e}")  # noqa T201
             return Decimal(0)
 
     @staticmethod
