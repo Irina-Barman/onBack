@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
+from threading import Lock
+import time
 from typing import Dict, List
 
 from sqlalchemy import func
@@ -111,15 +113,21 @@ def create_wallets(user: User) -> Dict[str, str]:
                 db.session.add(w)
                 existing[net] = addr
             except ValueError as e:
-                logger.error(f"Ошибка при создании кошелька для сети {net}: {str(e)}")
+                logger.error(
+                    f"Ошибка при создании кошелька для сети {net}: {str(e)}"
+                )
                 raise
 
     try:
         if db.session.new or db.session.dirty:
             db.session.commit()
     except Exception as e:
-        logger.error(f"Ошибка при сохранении кошельков в базе данных: {str(e)}")
-        raise RegistrationError("Ошибка при сохранении кошельков в базе данных.")
+        logger.error(
+            f"Ошибка при сохранении кошельков в базе данных: {str(e)}"
+        )
+        raise RegistrationError(
+            "Ошибка при сохранении кошельков в базе данных."
+        )
 
     return existing
 
@@ -148,6 +156,20 @@ def list_wallets(user: User) -> Dict[str, str] | None:
 
 
 # ───────── fees / balance
+
+# Кеш: ключ - user_id, значение - (timestamp, balances)
+_balance_cache: dict[int, tuple[float, dict[str, Decimal]]] = {}
+_cache_lock = Lock()
+_CACHE_TTL = 30  # кеш хранится 30 секунд
+
+
+def invalidate_balance_cache(user_id: int):
+    """Сброс кэша баланса"""
+    with _cache_lock:
+        if user_id in _balance_cache:
+            del _balance_cache[user_id]
+
+
 def transfer_fee_table() -> Dict[str, Decimal]:
     """
     Получить таблицу комиссий за переводы для всех сетей.
@@ -170,8 +192,12 @@ def transfer_fee_table() -> Dict[str, Decimal]:
     missing_networks = [net for net in NETWORKS if net not in fees]
 
     if missing_networks:
-        logger.error(f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}")
-        raise ValueError(f"Missing transfer fees for networks: {', '.join(missing_networks)}")
+        logger.error(
+            f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}"
+        )
+        raise ValueError(
+            f"Missing transfer fees for networks: {', '.join(missing_networks)}"
+        )
 
     return fees
 
@@ -207,51 +233,87 @@ def get_real_balance(user: User, network: str) -> Decimal:
 
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
     """
-    Рассчитывает баланс пользователя для каждой сети.
+    Рассчитывает баланс пользователя для каждой сети с кешированием.
 
-    Суммирует подтвержденные транзакции пользователя
-    (депозиты и выводы) для каждой сети из списка NETWORKS.
-    Возврашается словарь, где ключи представляют собой названия сетей
-    с суффиксом '_balance', а значения — соответствующие балансы
-    (разница между депозитами и выводами).
+    Функция суммирует подтвержденные транзакции пользователя (депозиты и выводы)
+    для каждой сети из списка NETWORKS, формируя баланс как разницу между суммами
+    депозитов и выводов. Результат кешируется на короткий промежуток времени (_CACHE_TTL),
+    чтобы снизить нагрузку на базу при частых запросах.
+
+    При ошибках запроса к базе данных или конвертации данных функция не ломается,
+    возвращая текущий рассчитанный (возможно пустой) баланс, а кеш обновляется
+    только при успешном выполнении.
 
     Args:
     ----------
     user : User
         Объект пользователя, для которого необходимо рассчитать баланс.
 
-    Return:
+    Returns:
     ----------
     Dict[str, Decimal]
-        Словарь, в котором ключами являются названия сетей с суффиксом
-        '_balance', а значениями — балансы пользователей в этих сетях.
+        Словарь с ключами вида "<название_сети>_balance" и значениями балансов
+        пользователя по каждой сети.
+
+    Примечания:
+    ----------
+    - Кеш реализован через глобальный словарь _balance_cache с блокировкой _cache_lock
+      для потокобезопасности.
+    - Время жизни кеша определяется константой _CACHE_TTL (в секундах).
+    - Возвращается копия словаря балансов, чтобы избежать внешних изменений кеша.
+    - При возникновении ошибок в запросе или подсчёте баланс возвращается без обновления кеша,
+      а ошибка логируется.
     """
+    now = time.time()
+    with _cache_lock:
+        cached = _balance_cache.get(user.id)
+        if cached:
+            timestamp, balances = cached
+            # Если кеш ещё актуален - возвращаем копию, чтобы избежать мутаций
+            if now - timestamp < _CACHE_TTL:
+                return balances.copy()
+
+    # Если кеш отсутствует или устарел - пересчитываем баланс
     balances = {f"{net}_balance": Decimal(0) for net in NETWORKS}
 
-    results = (
-        db.session.query(
-            Transaction.network,
-            Transaction.type,
-            func.coalesce(func.sum(Transaction.amount), 0),
+    try:
+        results = (
+            db.session.query(
+                Transaction.network,
+                Transaction.type,
+                func.coalesce(func.sum(Transaction.amount), 0),
+            )
+            .filter(
+                Transaction.user_id == user.id,
+                Transaction.network.in_(NETWORKS),
+                Transaction.status == TxStatus.confirmed,
+                Transaction.type.in_([TxType.deposit, TxType.withdraw]),
+            )
+            .group_by(Transaction.network, Transaction.type)
+            .all()
         )
-        .filter(
-            Transaction.user_id == user.id,
-            Transaction.network.in_(NETWORKS),
-            Transaction.status == TxStatus.confirmed,
-            Transaction.type.in_([TxType.deposit, TxType.withdraw]),
+
+        for network, tx_type, amount_sum in results:
+            key = f"{network}_balance"
+            if tx_type == TxType.deposit:
+                balances[key] += Decimal(amount_sum)
+            elif tx_type == TxType.withdraw:
+                balances[key] -= Decimal(amount_sum)
+
+        # Обновляем кеш только после успешного подсчёта
+        with _cache_lock:
+            _balance_cache[user.id] = (now, balances.copy())
+
+    except Exception as e:
+        # Логируем ошибку, возвращаем текущий (возможно пустой) баланс без обновления кеша
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.error(
+            f"Ошибка при подсчёте баланса пользователя {user.id}: {e}"
         )
-        .group_by(Transaction.network, Transaction.type)
-        .all()
-    )
 
-    for network, tx_type, amount_sum in results:
-        key = f"{network}_balance"
-        if tx_type == TxType.deposit:
-            balances[key] += Decimal(amount_sum)
-        elif tx_type == TxType.withdraw:
-            balances[key] -= Decimal(amount_sum)
-
-    return balances
+    return balances.copy()
 
 
 # ───────── history
@@ -273,7 +335,11 @@ def history(user: User) -> List[Transaction]:
     List[Transaction]
         Список транзакций пользователя, отсортированных по времени создания.
     """
-    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
+    return (
+        Transaction.query.filter_by(user_id=user.id)
+        .order_by(Transaction.created_at.desc())
+        .all()
+    )
 
 
 def balance_for(user: User, network: str) -> Decimal:
@@ -343,6 +409,7 @@ def debit(user: User, network: str, amount: Decimal) -> Transaction:
     )
     db.session.add(tx)
     db.session.commit()
+    invalidate_balance_cache(user.id)  # сбрасываем кэш баланса
     return tx
 
 
@@ -360,42 +427,47 @@ def withdraw_funds(
     twofa_code: str,
 ) -> Transaction:
     """
-    Выводит средства пользователя на указанный адрес.
+    Инициирует вывод средств пользователя на указанный адрес.
 
-    Проверяет наличие сети, корректность кода двухфакторной аутентификации,
-    а также достаточность баланса для вывода средств с учетом комиссии.
-    Если все проверки пройдены, средства переводятся на указанный адрес,
-    и создается объект Transaction, который сохраняется в базе данных.
+    Функция выполняет следующие шаги:
+    - Проверяет, что указанная сеть поддерживается.
+    - Проверяет корректность кода двухфакторной аутентификации (2FA).
+    - Получает комиссию за перевод для выбранной сети.
+    - Проверяет достаточность псевдо-баланса пользователя с использованием кеша.
+    - При необходимости запрашивает реальный баланс из блокчейна и обновляет кеш.
+    - Проверяет, что реальный баланс достаточен для вывода с учётом комиссии.
+    - Находит кошелёк пользователя для выбранной сети и расшифровывает приватный ключ.
+    - Выполняет транзакцию перевода средств через соответствующий провайдер сети.
+    - Создаёт и сохраняет транзакцию со статусом "pending".
+    - Инвалидирует кеш баланса пользователя после успешного создания транзакции.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, который инициирует вывод средств.
-    network : str
-        Название сети, из которой выводятся средства.
-    amount : Decimal
-        Сумма, которую необходимо вывести.
-    dest : str
-        Адрес, на который будут переведены средства.
-    twofa_code : str
-        Код двухфакторной аутентификации для подтверждения операции.
+        user (User): Пользователь, инициирующий вывод средств.
+        network (str): Название сети ('erc', 'bep', 'trc') для вывода.
+        amount (Decimal): Сумма для вывода.
+        dest (str): Адрес назначения для перевода средств.
+        twofa_code (str): Код двухфакторной аутентификации для подтверждения операции.
 
-    Return:
-    ----------
-    Transaction
-        Объект созданной транзакции.
+    Returns:
+        Transaction: Объект созданной транзакции вывода средств.
 
-    Exceptions:
-    -----------
-    ValueError
-        Если сеть неизвестна, код 2FA неверен, комиссия не найдена,
-        недостаточный баланс или кошелек не найден.
+    Raises:
+        ValueError: В случае, если:
+            - Сеть не поддерживается.
+            - Код 2FA некорректен.
+            - Комиссия для сети не найдена.
+            - Баланс недостаточен для вывода с учётом комиссии.
+            - Кошелёк пользователя для сети не найден.
     """
+    # Проверяем, что сеть поддерживается
     if network not in NETWORKS:
         raise ValueError(f"Unknown network: {network}")
-    if twofa_code != "123456":
+
+    # Проверяем корректность кода 2FA
+    if twofa_code != "123456":  # TODO: заменить на реальную проверку
         raise ValueError("Invalid 2FA")
 
+    # Получаем комиссию за перевод для выбранной сети
     try:
         fee = transfer_fee_table()[network]
     except KeyError:
@@ -403,21 +475,63 @@ def withdraw_funds(
 
     total = amount + fee
 
-    if balance_for(user, network) < total:
-        raise ValueError("Insufficient balance")
+    now = time.time()
+    # Проверяем кешированный баланс и время кеша для оптимизации вызова реального баланса
+    with _cache_lock:
+        cached = _balance_cache.get(user.id)
+        if cached:
+            timestamp, balances = cached
+            balance = balances.get(f"{network}_balance", Decimal(0))
+            cache_age = now - timestamp
+        else:
+            balance = Decimal(0)
+            cache_age = None
 
+    # Решаем, когда запрашивать реальный баланс
+    need_real_check = False
+    if balance < total:
+        need_real_check = True
+    elif cache_age is None or cache_age > 30:
+        need_real_check = True
+
+    # Если кеш устарел или баланса недостаточно, запрашиваем реальный баланс из блокчейна
+    if need_real_check:
+        real_balance = get_real_balance(user, network)
+        if real_balance < total:
+            raise ValueError("Insufficient real balance")
+        # Обновляем кеш новым значением баланса, сливая с существующим кешем
+        with _cache_lock:
+            old = _balance_cache.get(user.id)
+            if old:
+                _, old_balances = old
+                new_balances = old_balances.copy()
+            else:
+                new_balances = {
+                    f"{net}_balance": Decimal(0) for net in NETWORKS
+                }
+            new_balances[f"{network}_balance"] = real_balance
+            _balance_cache[user.id] = (now, new_balances)
+    else:
+        # Если кеш актуален, но баланс недостаточен — ошибка
+        if balance < total:
+            raise ValueError("Insufficient balance")
+
+    # Находим кошелёк пользователя для указанной сети
     wallet = next((w for w in user.wallets if w.network == network), None)
     if not wallet:
         raise ValueError("Wallet not found")
 
+    # Расшифровываем приватный ключ кошелька
     pk = Wallet.decrypt_pk(wallet.pk_enc)
 
+    # Выполняем перевод средств через соответствующий провайдер сети
     tx_hash = {
         "erc": lambda: ERC20.transfer(pk, dest, amount),
         "bep": lambda: BEP20.transfer(pk, dest, amount),
         "trc": lambda: TRC20.transfer(pk, dest, amount),
     }[network]()
 
+    # Создаём объект транзакции и сохраняем в базе
     tx = Transaction(
         user_id=user.id,
         type=TxType.withdraw,
@@ -429,6 +543,10 @@ def withdraw_funds(
     )
     db.session.add(tx)
     db.session.commit()
+
+    # Инвалидируем кеш баланса пользователя, чтобы при следующем запросе баланс обновился
+    invalidate_balance_cache(user.id)
+
     logger.info(f"[WITHDRAW] {network} hash={tx_hash}")
     return tx
 
@@ -479,6 +597,7 @@ def ref_credit(user_id: int, amount: Decimal) -> None:
     else:
         rb.balance += amount
     db.session.flush()
+    invalidate_balance_cache(user_id)  # сбрасываем кэш баланса
 
 
 @ledger(LedgerType.referral, direction="out")  # отрицательное списание
@@ -521,6 +640,8 @@ def ref_debit(user: User, amount: Decimal) -> Transaction:
     )
     db.session.add(tx)
     db.session.flush()
+    invalidate_balance_cache(user.id)  # сбрасываем кэш баланса
+
     return tx
 
 
@@ -565,6 +686,7 @@ def credit_to_user_balance(
     )
     db.session.add(tx)
     db.session.commit()
+    invalidate_balance_cache(user.id)  # сбрасываем кэш баланса
     return tx
 
 
@@ -610,3 +732,4 @@ def credit_to_network_balance(
         ),
     )
     db.session.commit()
+    invalidate_balance_cache(user_id)  # сбрасываем кэш баланса
