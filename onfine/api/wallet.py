@@ -60,7 +60,9 @@ _withdraw_in = ns.model(
     {
         "network": fields.String(required=True, enum=["bep", "erc", "trc"]),
         "amount": fields.String(required=True, example="50.00"),
-        "destination": fields.String(required=True, example="0x… / TA… / bnb…"),
+        "destination": fields.String(
+            required=True, example="0x… / TA… / bnb…"
+        ),
         "2fa_code": fields.String(required=True, example="123456"),
     },
 )
@@ -104,6 +106,36 @@ _ref_wd = ns.model(
     {"amount": fields.String(required=True, example="25.00")},
 )
 
+# --- Модели для токенов ---
+token_out = ns.model(
+    "TokenOut",
+    {
+        "id": fields.Integer,
+        "symbol": fields.String,
+        "contract_address": fields.String,
+        "tracked": fields.Boolean,
+    },
+)
+
+balance_out = ns.model(
+    "BalanceOutTokens",
+    {
+        "symbol": fields.String,
+        "balance": fields.String,  # decimal as string
+    },
+)
+add_token_in = ns.model(
+    "AddTokenIn",
+    {
+        "token_id": fields.Integer(required=True),
+    },
+)
+remove_token_in = ns.model(
+    "RemoveTokenIn",
+    {
+        "token_id": fields.Integer(required=True),
+    },
+)
 
 # ---------- /create_wallet ----------
 @ns.route("/create_wallet")
@@ -121,7 +153,9 @@ class WalletCreate(Resource):
         user = User.query.get(get_jwt_identity())
         try:
             result = svc.create_wallets(user)
-            logger.info(f"Кошельки созданы или были найдены в db для пользователя {user.id}: {result}")
+            logger.info(
+                f"Кошельки созданы или были найдены в db для пользователя {user.id}: {result}"
+            )
             return result
         except SQLAlchemyError as e:
             logger.error(
@@ -155,7 +189,9 @@ class WalletGet(Resource):
             res = svc.list_wallets(user)
             if not res:
                 raise WalletRetrievalError("Wallets not found.")
-            logger.info(f"Адреса кошельков получены для пользователя {user.id}: {res}")
+            logger.info(
+                f"Адреса кошельков получены для пользователя {user.id}: {res}"
+            )
             return res
         except SQLAlchemyError as e:
             logger.error(
@@ -199,7 +235,9 @@ class TransferFee(Resource):
             )
             raise TransferFeeRetrievalError("Database error occurred.")
         except Exception as e:
-            logger.error(f"Не удалось получить комиссии за переводы: {e}", exc_info=True)
+            logger.error(
+                f"Не удалось получить комиссии за переводы: {e}", exc_info=True
+            )
             raise TransferFeeRetrievalError("Failed to get transfer fees.")
 
 
@@ -227,12 +265,13 @@ class Withdraw(Resource):
                 twofa_code=data["2fa_code"],
             )
             logger.info(
-                f"Запрос на вывод средств от пользователя {user.id}:(network={data['network']}, "
-                f"amount={data['amount']}, dest={data['destination']}, tx_id={tx.id}",
+                f"Запрос на вывод средств от пользователя {user.id}:(network={data['network']}, amount={data['amount']}, dest={data['destination']}, tx_id={tx.id}"
             )
             return {"status": tx.status.value, "transaction_id": tx.id}, 201
         except ValueError as e:
-            logger.warning(f"Некорректный запрос на вывод средств от пользователя {user.id}: {e}")
+            logger.warning(
+                f"Некорректный запрос на вывод средств от пользователя {user.id}: {e}"
+            )
             raise WithdrawError("Invalid request for withdrawal.")
         except SQLAlchemyError as e:
             logger.error(
@@ -270,7 +309,9 @@ class Balance(Resource):
                 "erc_balance": str(erc_balance),
                 "trc_balance": str(trc_balance),
             }
-            logger.info(f"Баланс получен для пользователя {user.id}: {balances}")
+            logger.info(
+                f"Баланс получен для пользователя {user.id}: {balances}"
+            )
             return balances
         except SQLAlchemyError as e:
             logger.error(
@@ -343,7 +384,9 @@ class RefBal(Resource):
         user = User.query.get(get_jwt_identity())
         try:
             balance = svc.ref_balance(user)
-            logger.info(f"Баланс рефералов для пользователя {user.id}: {balance}")
+            logger.info(
+                f"Баланс рефералов для пользователя {user.id}: {balance}"
+            )
             return {"balance": str(balance)}
         except Exception as e:
             logger.error(
@@ -369,20 +412,28 @@ class RefWithdraw(Resource):
         try:
             amt = Decimal(ns.payload["amount"])
         except Exception:
-            logger.warning(f"Неверный формат суммы вывода рефералов от пользователя {user.id}")
+            logger.warning(
+                f"Неверный формат суммы вывода рефералов от пользователя {user.id}"
+            )
             ns.abort(400, "Invalid amount format")
 
         min_payout = Decimal(os.getenv("REF_MIN_PAYOUT", "10"))
         if amt < min_payout:
-            logger.warning(f"Сумма вывода рефералов меньше минимальной у пользователя {user.id}: {amt} < {min_payout}")
+            logger.warning(
+                f"Сумма вывода рефералов меньше минимальной у пользователя {user.id}: {amt} < {min_payout}"
+            )
             ns.abort(400, f"Amount below minimum payout {min_payout}")
 
         try:
             svc.ref_debit(user, amt)
             svc.debit(user, "erc", -amt)
-            logger.info(f"Успешный вывод рефералов у пользователя {user.id}, сумма: {amt}")
+            logger.info(
+                f"Успешный вывод рефералов у пользователя {user.id}, сумма: {amt}"
+            )
         except ValueError as e:
-            logger.warning(f"Ошибка вывода рефералов у пользователя {user.id}: {e}")
+            logger.warning(
+                f"Ошибка вывода рефералов у пользователя {user.id}: {e}"
+            )
             ns.abort(400, str(e))
         except Exception as e:
             logger.error(
@@ -392,3 +443,149 @@ class RefWithdraw(Resource):
             raise ReferralError("Failed to withdraw referral funds.")
 
         return {"status": "ok"}
+
+
+# --- Эндпоинты по токенам с отслеживанием ---
+
+
+@ns.route("/tokens/<string:network>")
+class TokensList(Resource):
+    """
+    Получает список всех активных токенов сети с отметкой, отслеживает ли пользователь каждый из них.
+
+    Args:
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        list: Список токенов с полем "tracked".
+    """
+
+    @jwt_required()
+    @ns.marshal_list_with(token_out)
+    def get(self, network):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            ns.abort(404, "User not found")
+
+        all_tokens = svc.get_all_active_tokens(network)
+
+        tracked_tokens = svc.get_tracked_tokens(user, network)
+        tracked_ids = {t.id for t in tracked_tokens}
+
+        result = []
+        for token in all_tokens:
+            result.append(
+                {
+                    "id": token.id,
+                    "symbol": token.symbol,
+                    "contract_address": token.contract_address,
+                    "tracked": token.id in tracked_ids,
+                }
+            )
+        return result
+
+
+@ns.route("/tokens")
+class TokensAdd(Resource):
+    """
+    Добавляет токен в список отслеживаемых пользователем.
+
+    Request JSON:
+        {
+            "token_id": int
+        }
+
+    Returns:
+        dict: Сообщение об успешном добавлении и ID токена.
+    """
+
+    @jwt_required()
+    @ns.expect(add_token_in)
+    def post(self):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            ns.abort(404, "User not found")
+
+        data = ns.payload
+        token_id = data.get("token_id")
+        if not token_id:
+            ns.abort(400, "token_id required")
+
+        try:
+            tracked = svc.add_tracked_token(user, token_id)
+        except Exception as e:
+            ns.abort(400, str(e))
+
+        return {"message": "Token added", "token_id": tracked.token_id}, 201
+
+
+@ns.route("/tokens/remove")
+class TokensRemove(Resource):
+    """
+    Удаляет токен из списка отслеживаемых пользователем.
+
+    Request JSON:
+        {
+            "token_id": int
+        }
+
+    Returns:
+        dict: Сообщение об успешном удалении и ID токена.
+    """
+
+    @jwt_required()
+    @ns.expect(remove_token_in)
+    def delete(self):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            ns.abort(404, "User not found")
+
+        data = ns.payload
+        token_id = data.get("token_id")
+        if not token_id:
+            ns.abort(400, "token_id required")
+
+        try:
+            removed = svc.remove_tracked_token(user, token_id)
+            if not removed:
+                ns.abort(404, "Token not found in tracked list")
+        except Exception as e:
+            ns.abort(500, f"Failed to remove token: {e}")
+
+        logger.info(
+            f"Пользователь {user.id} удалил токен {token_id} из отслеживаемых"
+        )
+        return {"message": "Token removed", "token_id": token_id}, 200
+
+
+@ns.route("/balances/<string:network>")
+class TokenBalances(Resource):
+    """
+    Получает балансы всех отслеживаемых токенов пользователя в указанной сети.
+
+    Args:
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        dict: Словарь {символ_токена: баланс в строковом формате с 6 знаками после запятой}.
+    """
+
+    @jwt_required()
+    def get(self, network):
+        user_id = get_jwt_identity()
+        user = User.query.get(user_id)
+        if not user:
+            ns.abort(404, "User not found")
+
+        try:
+            balances = svc.get_tracked_balances(user, network)
+        except Exception as e:
+            ns.abort(500, f"Failed to get balances: {e}")
+
+        return {
+            sym: str(balance.quantize(Decimal("1.000000")))
+            for sym, balance in balances.items()
+        }
