@@ -15,10 +15,17 @@ onfine/api/wallet_api.py.
 from __future__ import annotations
 
 import logging
+import os
 from decimal import Decimal
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
+from multicall import Call, Multicall
 from sqlalchemy import func
+from web3 import Web3
+
+from onfine.blockchain.token_abi_loder import abi_by_name
+from onfine.models.blockchain_tokens import BlockchainTokens
+from onfine.models.user_tracked_tokens import UserTrackedTokens
 
 from ..api.error_handlers import RegistrationError
 from ..blockchain.providers import BEP20, ERC20, TRC20
@@ -31,34 +38,26 @@ from ..models.user import User
 from ..models.wallet import Wallet
 from ..utils.ledger_decorator import LedgerType, ledger
 
-NETWORKS: tuple[str, ...] = ("bep", "erc", "trc")
-
+NETWORKS: Tuple[str, ...] = ("bep", "erc", "trc")
 
 logger = logging.getLogger(__name__)
 
 
-# ───────── helpers
-def _gen_addr_pk(network: str) -> tuple[str, str]:
-    """
-    Генерирует адрес и приватный ключ для заданной сети.
+# ───────── helpers ─────────
 
-    Функция создает новый адрес и соответствующий приватный ключ в зависимости от
-    указанной сети. Поддерживаются сети ERC20, BEP20 и TRC20.
+
+def _gen_addr_pk(network: str) -> Tuple[str, str]:
+    """
+    Генерирует пару (адрес, приватный ключ) для заданной сети.
 
     Args:
-    ----------
-    network : str
-        Название сети, для которой необходимо сгенерировать адрес и приватный ключ.
+        network (str): Сеть, для которой генерируется кошелёк ('erc', 'bep', 'trc').
 
-    Return:
-    ----------
-    tuple[str, str]
-        Кортеж, содержащий сгенерированный адрес и приватный ключ.
+    Returns:
+        Tuple[str, str]: Кортеж из адреса и приватного ключа.
 
-    Exceptions:
-    -----------
-    ValueError
-        Если указана неизвестная сеть.
+    Raises:
+        ValueError: Если сеть неизвестна.
     """
     if network == "erc":
         return ERC20.generate_wallet()
@@ -66,35 +65,136 @@ def _gen_addr_pk(network: str) -> tuple[str, str]:
         return BEP20.generate_wallet()
     if network == "trc":
         return TRC20.generate_wallet()
-
     raise ValueError("Unknown network")
 
 
-# ───────── wallet CRUD
-def create_wallets(user: User) -> Dict[str, str]:
+def _get_rpc_url(network: str) -> str:
     """
-    Создать кошельки для пользователя во всех сетях из NETWORKS, отсутствующих у него.
-
-    Проверяет, какие кошельки уже существуют у пользователя, и для
-    отсутствующих сетей генерирует новые адреса и зашифрованные приватные ключи.
-    Созданные кошельки добавляются в сессию базы данных и сохраняются.
+    Получает RPC URL для подключения к блокчейн-ноде по сети.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, для которого создаются кошельки.
+        network (str): Сеть ('erc', 'bep', 'trc').
 
-    Return:
-    ----------
-    Dict[str, str]
-        Словарь с сетями в качестве ключей и соответствующими адресами кошельков.
+    Returns:
+        str: RPC URL.
 
-    Exceptions:
-    -----------
-    ValueError
-        Если произошла ошибка при генерации адреса или приватного ключа для сети.
-    RegistrationError
-        Если произошла ошибка при сохранении новых кошельков в базе данных.
+    Raises:
+        ValueError: Если сеть неизвестна или переменная окружения не задана.
+    """
+    if network == "erc":
+        url = os.getenv("ERC_INFURA_URL") or os.getenv("ERC_CHAIN_URL")
+    elif network == "bep":
+        url = os.getenv("BEP_RPC_URL") or os.getenv("BEP_BSC_URL")
+    elif network == "trc":
+        url = os.getenv("TRON_FULL_NODE")
+    else:
+        raise ValueError(f"Unknown network: {network}")
+
+    if not url:
+        raise ValueError(f"RPC URL для сети {network} не настроен")
+    return url
+
+
+def _get_web3_and_abi(network: str) -> Tuple[Web3, Dict[str, dict]]:
+    """
+    Создаёт объект Web3 и загружает ABI для функций balanceOf и decimals токена.
+
+    Args:
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        Tuple[Web3, Dict[str, dict]]: Кортеж из объекта Web3 и словаря ABI.
+
+    Raises:
+        RuntimeError: Если ABI не найден.
+        ValueError: Если RPC URL не настроен.
+    """
+    rpc_url = _get_rpc_url(network)
+    w3 = Web3(Web3.HTTPProvider(rpc_url))
+    abi = abi_by_name()
+    balance_of_abi = abi.get("balanceOf")
+    decimals_abi = abi.get("decimals")
+    if not balance_of_abi or not decimals_abi:
+        raise RuntimeError("ABI для balanceOf или decimals не найден")
+    return w3, {"balanceOf": balance_of_abi, "decimals": decimals_abi}
+
+
+def _to_checksum(address: str) -> str:
+    """
+    Преобразует адрес в формат checksum Ethereum.
+
+    Args:
+        address (str): Адрес в любом регистре.
+
+    Returns:
+        str: Адрес в формате checksum.
+
+    Raises:
+        ValueError: Если адрес некорректен.
+    """
+    try:
+        return Web3.toChecksumAddress(address)
+    except Exception as e:
+        logger.error(f"Invalid address {address}: {e}")
+        raise ValueError(f"Invalid address: {address}")
+
+
+def _get_token_balance_from_contract(
+    w3: Web3,
+    token_address: str,
+    user_address: str,
+    balance_of_abi: dict,
+    decimals_abi: dict,
+) -> Decimal:
+    """
+    Получает баланс токена на адресе пользователя, используя контракт токена.
+
+    Args:
+        w3 (Web3): Объект Web3.
+        token_address (str): Адрес токена (контракта).
+        user_address (str): Адрес пользователя.
+        balance_of_abi (dict): ABI функции balanceOf.
+        decimals_abi (dict): ABI функции decimals.
+
+    Returns:
+        Decimal: Баланс токена с учётом десятичных знаков.
+
+    Raises:
+        RuntimeError: При ошибках вызова контракта.
+    """
+    token_address = _to_checksum(token_address)
+    user_address = _to_checksum(user_address)
+    contract = w3.eth.contract(
+        address=token_address, abi=[balance_of_abi, decimals_abi]
+    )
+    try:
+        balance_raw = contract.functions.balanceOf(user_address).call()
+        decimals = contract.functions.decimals().call()
+    except Exception as e:
+        logger.error(f"Ошибка при получении баланса токена: {e}")
+        raise RuntimeError(f"Ошибка при получении баланса токена: {e}")
+    if decimals is None:
+        decimals = 18
+    return Decimal(balance_raw) / (10**decimals)
+
+
+# ───────── wallet CRUD ─────────
+
+
+def create_wallets(user: User) -> Dict[str, str]:
+    """
+    Создаёт кошельки для пользователя по всем поддерживаемым сетям,
+    если они ещё не созданы.
+
+    Args:
+        user (User): Объект пользователя.
+
+    Returns:
+        Dict[str, str]: Словарь вида {network: address} с адресами кошельков.
+
+    Raises:
+        RegistrationError: При ошибках сохранения в БД.
+        ValueError: Если неизвестна сеть.
     """
     existing = {w.network: w.address for w in user.wallets}
 
@@ -111,120 +211,285 @@ def create_wallets(user: User) -> Dict[str, str]:
                 db.session.add(w)
                 existing[net] = addr
             except ValueError as e:
-                logger.error(f"Ошибка при создании кошелька для сети {net}: {str(e)}")
+                logger.error(
+                    f"Ошибка при создании кошелька для сети {net}: {str(e)}"
+                )
                 raise
 
     try:
         if db.session.new or db.session.dirty:
             db.session.commit()
     except Exception as e:
-        logger.error(f"Ошибка при сохранении кошельков в базе данных: {str(e)}")
-        raise RegistrationError("Ошибка при сохранении кошельков в базе данных.")
+        logger.error(
+            f"Ошибка при сохранении кошельков в базе данных: {str(e)}"
+        )
+        raise RegistrationError(
+            "Ошибка при сохранении кошельков в базе данных."
+        )
 
     return existing
 
 
 def list_wallets(user: User) -> Dict[str, str] | None:
     """
-    Получить словарь с адресами кошельков пользователя по сетям.
-
-    Формирует словарь, где ключ — название сети, а значение —
-    адрес кошелька пользователя в этой сети. Если у пользователя нет
-    ни одного кошелька, Возвращается None.
+    Возвращает адреса всех кошельков пользователя.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, для которого извлекаются кошельки.
+        user (User): Объект пользователя.
 
-    Return:
-    ----------
-    Dict[str, str] | None
-        Словарь с сетями и соответствующими адресами кошельков пользователя,
-        либо None, если кошельков нет.
+    Returns:
+        Dict[str, str] | None: Словарь {network: address} или None, если кошельков нет.
     """
     rows = {w.network: w.address for w in user.wallets}
     return rows or None
 
 
-# ───────── fees / balance
-def transfer_fee_table() -> Dict[str, Decimal]:
+# --- Работа с отслеживаемыми токенами ---
+
+
+def get_all_active_tokens(network: str) -> List[BlockchainTokens]:
     """
-    Получить таблицу комиссий за переводы для всех сетей.
+    Получает список всех активных токенов для указанной сети.
 
-    Извлекает из базы данных комиссии за переводы (в USDT) для сетей,
-    перечисленных в константе NETWORKS. Возвращается словарь, где ключ —
-    название сети, а значение — комиссия в виде Decimal.
+    Args:
+        network (str): Название или идентификатор блокчейн-сети (например, 'erc20', 'bsc').
 
-    Return:
-    ----------
-    Dict[str, Decimal]
-        Словарь с комиссиями за переводы по сетям.
-
-    Exceptions:
-    -----------
-    ValueError
-        Если отсутствуют комиссии для одной или нескольких сетей из NETWORKS.
+    Returns:
+        List[BlockchainTokens]: Список объектов BlockchainTokens, которые активны в указанной сети.
     """
-    fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
-    missing_networks = [net for net in NETWORKS if net not in fees]
-
-    if missing_networks:
-        logger.error(f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}")
-        raise ValueError(f"Missing transfer fees for networks: {', '.join(missing_networks)}")
-
-    return fees
+    return BlockchainTokens.query.filter_by(
+        network=network, is_active=True
+    ).all()
 
 
-def get_real_balance(user: User, network: str) -> Decimal:
+def get_tracked_tokens(user: User, network: str) -> List[BlockchainTokens]:
     """
-    Получить реальный баланс пользователя из блокчейна для указанной сети.
+    Получает список токенов, которые пользователь отслеживает в указанной сети.
 
     Args:
         user (User): Пользователь.
         network (str): Сеть ('erc', 'bep', 'trc').
 
     Returns:
-        Decimal: Баланс пользователя в сети.
+        List[BlockchainTokens]: Список токенов.
     """
+    tokens = (
+        BlockchainTokens.query.join(
+            UserTrackedTokens,
+            BlockchainTokens.id == UserTrackedTokens.token_id,
+        )
+        .filter(
+            UserTrackedTokens.user_id == user.id,
+            BlockchainTokens.network == network,
+            BlockchainTokens.is_active.is_(True),
+        )
+        .all()
+    )
+    return tokens
+
+
+def add_tracked_token(user: User, token_id: int) -> UserTrackedTokens:
+    """
+    Добавляет токен в список отслеживаемых пользователем.
+
+    Args:
+        user (User): Пользователь.
+        token_id (int): ID токена.
+
+    Returns:
+        UserTrackedTokens: Объект отслеживания токена.
+    """
+    existing = UserTrackedTokens.query.filter_by(
+        user_id=user.id, token_id=token_id
+    ).first()
+    if existing:
+        return existing
+    tracked = UserTrackedTokens(user_id=user.id, token_id=token_id)
+    db.session.add(tracked)
+    db.session.commit()
+    return tracked
+
+
+def remove_tracked_token(user: User, token_id: int) -> bool:
+    """
+    Удаляет токен из списка отслеживаемых пользователем.
+
+    Args:
+        user (User): Пользователь.
+        token_id (int): ID токена для удаления.
+
+    Returns:
+        bool: True, если токен был удалён, False если токен не найден в списке.
+
+    Raises:
+        Exception: При ошибках удаления из базы данных.
+    """
+    tracked = UserTrackedTokens.query.filter_by(
+        user_id=user.id, token_id=token_id
+    ).first()
+    if not tracked:
+        return False
+
+    db.session.delete(tracked)
+    try:
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Ошибка при удалении отслеживаемого токена: {e}")
+        raise
+
+    return True
+
+
+def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
+    """
+    Получает балансы всех отслеживаемых токенов пользователя в указанной сети.
+
+    Используется multicall для оптимизации запросов.
+
+    Args:
+        user (User): Пользователь.
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        Dict[str, Decimal]: Словарь {символ_токена: баланс}.
+    """
+    w3, abi = _get_web3_and_abi(network)
+
+    wallet = Wallet.query.filter_by(user_id=user.id, network=network).first()
+    if not wallet:
+        return {}
+
+    tokens = get_tracked_tokens(user, network)
+    if not tokens:
+        return {}
+
+    balance_of_abi = abi["balanceOf"]
+    decimals_abi = abi["decimals"]
+
+    calls = []
+    for token in tokens:
+        token_address = _to_checksum(token.contract_address)
+        # Запрос баланса
+        calls.append(
+            Call(
+                token_address,
+                [
+                    f"{balance_of_abi['name']}(address)(uint256)",
+                    wallet.address,
+                ],
+                [[f"{token.symbol}.balance", None]],
+            )
+        )
+        # Запрос decimals
+        calls.append(
+            Call(
+                token_address,
+                [f"{decimals_abi['name']}()(uint8)"],
+                [[f"{token.symbol}.decimals", None]],
+            )
+        )
+
+    multi = Multicall(calls, _w3=w3)
+    results = multi()
+
+    balances = {}
+    for token in tokens:
+        balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
+        decimals = results.get(f"{token.symbol}.decimals", 18) or 18
+        balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
+
+    return balances
+
+
+def get_token_balance(
+    user_address: str,
+    token_contract_address: str,
+    network: str,
+) -> Decimal:
+    """
+    Получает баланс конкретного токена у пользователя.
+
+    Args:
+        user_address (str): Адрес пользователя.
+        token_contract_address (str): Адрес токена (контракта).
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        Decimal: Баланс токена.
+    """
+    w3, abi = _get_web3_and_abi(network)
+    balance_of_abi = abi["balanceOf"]
+    decimals_abi = abi["decimals"]
+    return _get_token_balance_from_contract(
+        w3,
+        token_contract_address,
+        user_address,
+        balance_of_abi,
+        decimals_abi,
+    )
+
+
+# ───────── fees / balance ─────────
+
+
+def transfer_fee_table() -> Dict[str, Decimal]:
+    """
+    Загружает таблицу комиссий за перевод для всех сетей.
+
+    Returns:
+        Dict[str, Decimal]: Словарь {network: fee_usdt}.
+
+    Raises:
+        ValueError: Если отсутствуют комиссии для каких-либо сетей.
+    """
+    fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
+    missing_networks = [net for net in NETWORKS if net not in fees]
+
+    if missing_networks:
+        logger.error(
+            f"Отсутствуют комиссии за перевод для сетей: {', '.join(missing_networks)}"
+        )
+        raise ValueError(
+            f"Missing transfer fees for networks: {', '.join(missing_networks)}"
+        )
+
+    return fees
+
+
+def get_real_balance(user: User, network: str) -> Decimal:
+    """
+    Получает актуальный баланс пользователя в указанной сети, обращаясь к провайдеру.
+
+    Args:
+        user (User): Пользователь.
+        network (str): Сеть ('erc', 'bep', 'trc').
+
+    Returns:
+        Decimal: Баланс.
+    """
+    wallet = next((w for w in user.wallets if w.network == network), None)
+    if not wallet:
+        return Decimal(0)
+
     if network == "trc":
-        wallet = next((w for w in user.wallets if w.network == "trc"), None)
-        if not wallet:
-            return Decimal(0)
         return TRC20.balance(wallet.address)
     if network == "erc":
-        wallet = next((w for w in user.wallets if w.network == "erc"), None)
-        if not wallet:
-            return Decimal(0)
         return ERC20.balance(wallet.address)
     if network == "bep":
-        wallet = next((w for w in user.wallets if w.network == "bep"), None)
-        if not wallet:
-            return Decimal(0)
         return BEP20.balance(wallet.address)
     raise ValueError(f"Unknown network: {network}")
 
 
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
     """
-    Рассчитывает баланс пользователя для каждой сети.
-
-    Суммирует подтвержденные транзакции пользователя
-    (депозиты и выводы) для каждой сети из списка NETWORKS.
-    Возврашается словарь, где ключи представляют собой названия сетей
-    с суффиксом '_balance', а значения — соответствующие балансы
-    (разница между депозитами и выводами).
+    Получает баланс пользователя из истории транзакций (депозиты и выводы).
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, для которого необходимо рассчитать баланс.
+        user (User): Пользователь.
 
-    Return:
-    ----------
-    Dict[str, Decimal]
-        Словарь, в котором ключами являются названия сетей с суффиксом
-        '_balance', а значениями — балансы пользователей в этих сетях.
+    Returns:
+        Dict[str, Decimal]: Балансы по сетям {'erc_balance': ..., 'bep_balance': ..., 'trc_balance': ...}
     """
     balances = {f"{net}_balance": Decimal(0) for net in NETWORKS}
 
@@ -254,53 +519,36 @@ def user_balance_stub(user: User) -> Dict[str, Decimal]:
     return balances
 
 
-# ───────── history
+# ───────── history ─────────
+
+
 def history(user: User) -> List[Transaction]:
     """
-    Получить историю транзакций пользователя.
-
-    Извлекает все транзакции, связанные с указанным пользователем,
-    сортируя их по времени создания в порядке убывания. Возвращается
-    список объектов Transaction.
+    Получает историю всех транзакций пользователя, отсортированную по дате (сначала новые).
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, для которого извлекается история транзакций.
+        user (User): Пользователь.
 
-    Return:
-    ----------
-    List[Transaction]
-        Список транзакций пользователя, отсортированных по времени создания.
+    Returns:
+        List[Transaction]: Список транзакций.
     """
-    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
+    return (
+        Transaction.query.filter_by(user_id=user.id)
+        .order_by(Transaction.created_at.desc())
+        .all()
+    )
 
 
 def balance_for(user: User, network: str) -> Decimal:
     """
-    Получить баланс пользователя для указанной сети.
-
-    Возвращает баланс пользователя в заданной сети, используя
-    вспомогательную функцию user_balance_stub, которая возвращает словарь
-    с балансами по сетям. Ключ словаря формируется как '{network}_balance'.
+    Получает баланс пользователя в указанной сети из истории транзакций.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, для которого запрашивается баланс.
-    network : str
-        Название сети, для которой требуется получить баланс.
+        user (User): Пользователь.
+        network (str): Сеть.
 
-    Return:
-    ----------
-    Decimal
-        Баланс пользователя в указанной сети.
-
-    Exceptions:
-    -----------
-    KeyError
-        Если баланс для указанной сети отсутствует в словаре,
-        возвращаемом user_balance_stub.
+    Returns:
+        Decimal: Баланс.
     """
     return user_balance_stub(user)[f"{network}_balance"]
 
@@ -313,26 +561,15 @@ def balance_for(user: User, network: str) -> Decimal:
 )
 def debit(user: User, network: str, amount: Decimal) -> Transaction:
     """
-    Дебетует указанную сумму с баланса пользователя.
-
-    Создает новую транзакцию типа "покупка" для
-    указанного пользователя,уменьшая его баланс на заданную сумму.
-    Транзакция сохраняется в базе данных
-    и возвращается объект Transaction.
+    Списывает средства пользователя (например, при покупке).
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, с баланса которого будет списана сумма.
-    network : str
-        Название сети, в которой производится дебетование.
-    amount : Decimal
-        Сумма, которую необходимо дебетовать.
+        user (User): Пользователь.
+        network (str): Сеть.
+        amount (Decimal): Сумма.
 
-    Return:
-    ----------
-    Transaction
-        Объект созданной транзакции.
+    Returns:
+        Transaction: Созданная транзакция.
     """
     tx = Transaction(
         user_id=user.id,
@@ -360,36 +597,20 @@ def withdraw_funds(
     twofa_code: str,
 ) -> Transaction:
     """
-    Выводит средства пользователя на указанный адрес.
-
-    Проверяет наличие сети, корректность кода двухфакторной аутентификации,
-    а также достаточность баланса для вывода средств с учетом комиссии.
-    Если все проверки пройдены, средства переводятся на указанный адрес,
-    и создается объект Transaction, который сохраняется в базе данных.
+    Выполняет вывод средств пользователя из указанной сети на внешний адрес.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, который инициирует вывод средств.
-    network : str
-        Название сети, из которой выводятся средства.
-    amount : Decimal
-        Сумма, которую необходимо вывести.
-    dest : str
-        Адрес, на который будут переведены средства.
-    twofa_code : str
-        Код двухфакторной аутентификации для подтверждения операции.
+        user (User): Пользователь.
+        network (str): Сеть ('erc', 'bep', 'trc').
+        amount (Decimal): Сумма вывода.
+        dest (str): Адрес получателя.
+        twofa_code (str): Код 2FA для подтверждения.
 
-    Return:
-    ----------
-    Transaction
-        Объект созданной транзакции.
+    Returns:
+        Transaction: Созданная транзакция вывода.
 
-    Exceptions:
-    -----------
-    ValueError
-        Если сеть неизвестна, код 2FA неверен, комиссия не найдена,
-        недостаточный баланс или кошелек не найден.
+    Raises:
+        ValueError: При недостаточном балансе, неверном 2FA или других ошибках.
     """
     if network not in NETWORKS:
         raise ValueError(f"Unknown network: {network}")
@@ -435,42 +656,25 @@ def withdraw_funds(
 
 def ref_balance(user: User) -> Decimal:
     """
-    Возвращает реферальный баланс пользователя.
-
-    Функция пытается получить объект ReferralBalance по идентификатору пользователя.
-    Если объект найден, возвращается его баланс в виде Decimal, иначе возвращается 0.
+    Получает баланс реферальных средств пользователя.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, для которого запрашивается реферальный баланс.
+        user (User): Пользователь.
 
-    Return:
-    ----------
-    Decimal
-        Реферальный баланс пользователя.
-    """  # noqa: E501
+    Returns:
+        Decimal: Баланс рефералов.
+    """
     rb = ReferralBalance.query.get(user.id)
     return Decimal(rb.balance) if rb else Decimal(0)
 
 
 def ref_credit(user_id: int, amount: Decimal) -> None:
     """
-    Кредитует реферальный баланс пользователя.
-
-    Функция добавляет указанную сумму к реферальному балансу пользователя с заданным user_id.
-    Если запись о реферальном балансе отсутствует, создается новая с начальным балансом amount.
+    Начисляет реферальные средства пользователю.
 
     Args:
-    ----------
-    user_id : int
-        Идентификатор пользователя, чей реферальный баланс будет увеличен.
-    amount : Decimal
-        Сумма, которую необходимо добавить к реферальному балансу.
-
-    Return:
-    ----------
-    None
+        user_id (int): ID пользователя.
+        amount (Decimal): Сумма для начисления.
     """
     rb = ReferralBalance.query.get(user_id)
     if not rb:
@@ -484,28 +688,17 @@ def ref_credit(user_id: int, amount: Decimal) -> None:
 @ledger(LedgerType.referral, direction="out")  # отрицательное списание
 def ref_debit(user: User, amount: Decimal) -> Transaction:
     """
-    Дебетует сумму из реферального баланса пользователя.
-
-    Функция проверяет наличие реферального баланса и его достаточность для
-    списания указанной суммы. Если баланс достаточен сумма списывается,
-    и создается объект Transaction, который сохраняется в базе данных.
+    Списывает реферальные средства пользователя.
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, у которого будет списана сумма.
-    amount : Decimal
-        Сумма, которую необходимо дебетовать из реферального баланса.
+        user (User): Пользователь.
+        amount (Decimal): Сумма списания.
 
-    Return:
-    ----------
-    Transaction
-        Объект созданной транзакции.
+    Returns:
+        Transaction: Транзакция списания.
 
-    Exceptions:
-    -----------
-    ValueError
-        Если реферальный баланс недостаточен или отсутствует.
+    Raises:
+        ValueError: Если недостаточно средств.
     """
     rb = ReferralBalance.query.get(user.id)
     if not rb or rb.balance < amount:
@@ -536,25 +729,15 @@ def credit_to_user_balance(
     amount: Decimal,
 ) -> Transaction:
     """
-    Кредитует сумму на баланс пользователя.
-
-    Функция создает транзакцию, которая вычитает указанную сумму из баланса
-    пользователя в заданной сети. Транзакция сохраняется в базе данных
-    с состоянием 'подтверждено'.
+    Начисляет средства пользователю (например, прибыль).
 
     Args:
-    ----------
-    user : User
-        Объект пользователя, которому будет зачислена сумма.
-    network : str
-        Название сети, в которой производится зачисление.
-    amount : Decimal
-        Сумма, которую необходимо зачислить на баланс пользователя.
+        user (User): Пользователь.
+        network (str): Сеть.
+        amount (Decimal): Сумма.
 
     Returns:
-    ----------
-    Transaction
-        Объект созданной транзакции, представляющий операцию зачисления.
+        Transaction: Транзакция начисления.
     """
     tx = Transaction(
         user_id=user.id,
@@ -568,26 +751,18 @@ def credit_to_user_balance(
     return tx
 
 
-#  Переименовано с credit_to_balance
 def credit_to_network_balance(
     user_id: int,
     network: str,
     amount: Decimal,
 ) -> None:
     """
-    Кредитует указанную сумму на баланс пользователя для заданной сети.
-
-    Создаёт транзакцию типа "депозит" со статусом "подтверждён" и
-    соответствующую запись в бухгалтерском журнале (LedgerEntry),
-    затем сохраняет изменения в базе данных.
+    Начисляет средства пользователю в указанной сети (депозит).
 
     Args:
-        user_id (int): Идентификатор пользователя, которому начисляется сумма.
-        network (str): Название или идентификатор сети, для которой проводится операция.
-        amount (Decimal): Сумма для зачисления на баланс.
-
-    Returns:
-        None
+        user_id (int): ID пользователя.
+        network (str): Сеть.
+        amount (Decimal): Сумма.
     """
     tx = Transaction(
         user_id=user_id,
