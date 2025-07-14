@@ -1,7 +1,7 @@
 import os
 from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from cryptography.fernet import Fernet
 from tronpy import Tron
@@ -10,10 +10,11 @@ from tronpy.providers import HTTPProvider
 from web3 import Web3
 from web3.contract import Contract
 
+from onfine.blockchain.token_abi_loder import abi_by_name
+
 FERNET = Fernet(os.getenv("FERNET_KEY").encode())
 
 
-# ---------------------------------------------------------------------- base
 class TokenNetwork(ABC):
     symbol = "USDT"
     decimals = 6
@@ -69,9 +70,42 @@ class TokenNetwork(ABC):
         """
 
 
-# ------------------------------------------------------------------ ERC-20
+class TokenNetwork:  # noqa F811
+    def __init__(self, network: str):  # noqa ANN204
+        self.network = network
+        self.web3 = self._init_web3()
+        self.abi = abi_by_name()
+
+    def _init_web3(self) -> Web3:
+        if self.network == "erc20":
+            return Web3(Web3.HTTPProvider(os.getenv("ERC_ANKR_HTTP_URL")))
+        elif self.network == "bep20":
+            return Web3(Web3.HTTPProvider(os.getenv("BEP_ANKR_HTTP_URL")))
+        else:
+            raise ValueError(f"Unsupported network: {self.network}")
+
+    def _contract(self, contract_address: str) -> Contract:
+        return self.web3.eth.contract(address=Web3.to_checksum_address(contract_address), abi=self.abi)
+
+    def get_token_balance(self, address: str, token: Dict) -> Dict:  # noqa D102
+        try:
+            contract = self._contract(token["contract"])
+            raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
+            balance = Decimal(raw_balance) / (10 ** token["decimals"])
+            return {"symbol": token["symbol"], "balance": str(balance), "contract": token["contract"]}
+        except Exception as e:
+            return {"symbol": token["symbol"], "balance": "error", "contract": token["contract"], "error": str(e)}
+
+    def get_balances(self, address: str, user_selected_tokens: List[Dict]) -> List[Dict]:  # noqa D102
+        return [self.get_token_balance(address, token) for token in user_selected_tokens]
+
+    def generate_wallet(self) -> Tuple[str, str]:  # noqa D102
+        acc = self.web3.eth.account.create()
+        return acc.address, acc.key.hex()
+
+
 class ERC20(TokenNetwork):
-    w3 = Web3(Web3.HTTPProvider(os.getenv("ERC_URL")))
+    w3 = Web3(Web3.HTTPProvider(os.getenv("ERC_ANKR_HTTP_URL")))
     contract_addr = Web3.to_checksum_address(os.getenv("USDT_ERC_CONTRACT_ADDR"))
 
     @staticmethod
@@ -86,7 +120,6 @@ class ERC20(TokenNetwork):
         """
         return ERC20.w3.eth.contract(address=ERC20.contract_addr, abi=abi)
 
-    # ---------- wallet ----------
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """Создает новый кошелек и Return адрес и приватный ключ.
@@ -97,7 +130,6 @@ class ERC20(TokenNetwork):
         acc = ERC20.w3.eth.account.create()
         return acc.address, acc.key.hex()
 
-    # ---------- balance ----------
     @staticmethod
     def balance(addr: str) -> Decimal:
         """
@@ -117,7 +149,6 @@ class ERC20(TokenNetwork):
             },
         ]
 
-        # Получение баланса
         bal = ERC20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
         return Decimal(bal) / (10**ERC20.decimals)
 
@@ -202,9 +233,8 @@ class ERC20(TokenNetwork):
         return ERC20.w3.eth.send_raw_transaction(signed.rawTransaction).hex()
 
 
-# ------------------------------------------------------------------ BEP-20
 class BEP20(TokenNetwork):
-    w3 = Web3(Web3.HTTPProvider(os.getenv("BEP_URL")))
+    w3 = Web3(Web3.HTTPProvider(os.getenv("BEP_ANKR_HTTP_URL")))
     contract_addr = Web3.to_checksum_address(os.getenv("USDT_BEP_CONTRACT_ADDR"))
 
     @staticmethod
@@ -242,16 +272,7 @@ class BEP20(TokenNetwork):
         Returns:
             Decimal: Баланс токенов.
         """
-        abi = [
-            {
-                "constant": True,
-                "inputs": [{"name": "_owner", "type": "address"}],
-                "name": "balanceOf",
-                "outputs": [{"name": "balance", "type": "uint256"}],
-                "type": "function",
-            },
-        ]
-        bal = BEP20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
+        bal = BEP20._contract(abi_by_name()["balanceOf"]).functions.balanceOf(Web3.to_checksum_address(addr)).call()
         return Decimal(bal) / (10**BEP20.decimals)
 
     @staticmethod
@@ -337,7 +358,6 @@ class BEP20(TokenNetwork):
         return BEP20.w3.eth.send_raw_transaction(signed.rawTransaction).hex()
 
 
-# ------------------------------------------------------------------ TRC-20
 class TRC20(TokenNetwork):
     client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
     contract_addr = os.getenv("USDT_TRC_CONTRACT_ADDR")
@@ -439,3 +459,10 @@ class TRC20(TokenNetwork):
             raise Exception(f"TRC20 transfer failed: {result}")
 
         return result["txid"]
+
+
+# if __name__ == "__main__":
+#     blockcain = TokenNetwork("erc20")
+#     blockcain_bep = TokenNetwork("bep20")
+#     wallet = blockcain.generate_wallet()
+#     BEP20.balance("feffeffee")
