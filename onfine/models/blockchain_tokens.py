@@ -15,5 +15,5 @@ class BlockchainTokens(db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def __repr__(self):  # noqa ANN204
-        return f"<Token {self.network}:{self.symbol}>"
+    def __repr__(self):
+        return f"<BlockchainToken network={self.network} symbol={self.symbol}>"

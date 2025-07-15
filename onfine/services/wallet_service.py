@@ -25,7 +25,9 @@ from web3 import Web3
 
 from onfine.blockchain.token_abi_loder import abi_by_name
 from onfine.models.blockchain_tokens import BlockchainTokens
-from onfine.models.user_tracked_tokens import UserTrackedTokens
+from onfine.models.user_tracked_blockchain_tokens import (
+    UserTrackedBlockchainToken,
+)
 
 from ..api.error_handlers import RegistrationError
 from ..blockchain.providers import BEP20, ERC20, TRC20
@@ -139,7 +141,7 @@ def _to_checksum(address: str) -> str:
         raise ValueError(f"Invalid address: {address}")
 
 
-def _get_token_balance_from_contract(
+def _get_blockchain_token_balance_from_contract(
     w3: Web3,
     token_address: str,
     user_address: str,
@@ -247,7 +249,9 @@ def list_wallets(user: User) -> Dict[str, str] | None:
 # --- Работа с отслеживаемыми токенами ---
 
 
-def get_all_active_tokens(network: str) -> List[BlockchainTokens]:
+def get_all_active_blockchain_tokens(
+    network: str,
+) -> List[BlockchainTokens]:
     """
     Получает список всех активных токенов для указанной сети.
 
@@ -262,7 +266,9 @@ def get_all_active_tokens(network: str) -> List[BlockchainTokens]:
     ).all()
 
 
-def get_tracked_tokens(user: User, network: str) -> List[BlockchainTokens]:
+def get_tracked_blockchain_tokens(
+    user: User, network: str
+) -> List[BlockchainTokens]:
     """
     Получает список токенов, которые пользователь отслеживает в указанной сети.
 
@@ -273,50 +279,55 @@ def get_tracked_tokens(user: User, network: str) -> List[BlockchainTokens]:
     Returns:
         List[BlockchainTokens]: Список токенов.
     """
-    tokens = (
+    blockchain_tokens = (
         BlockchainTokens.query.join(
-            UserTrackedTokens,
-            BlockchainTokens.id == UserTrackedTokens.token_id,
+            UserTrackedBlockchainToken,
+            BlockchainTokens.id
+            == UserTrackedBlockchainToken.blockchain_token_id,
         )
         .filter(
-            UserTrackedTokens.user_id == user.id,
+            UserTrackedBlockchainToken.user_id == user.id,
             BlockchainTokens.network == network,
             BlockchainTokens.is_active.is_(True),
         )
         .all()
     )
-    return tokens
+    return blockchain_tokens
 
 
-def add_tracked_token(user: User, token_id: int) -> UserTrackedTokens:
+def add_tracked_token(
+    user: User, blockchain_token_id: int
+) -> UserTrackedBlockchainToken:
     """
     Добавляет токен в список отслеживаемых пользователем.
 
     Args:
         user (User): Пользователь.
-        token_id (int): ID токена.
+        blockchain_token_id (int): ID токена.
 
     Returns:
-        UserTrackedTokens: Объект отслеживания токена.
+        UserTrackedBlockchainToken: Объект отслеживания токена.
     """
-    existing = UserTrackedTokens.query.filter_by(
-        user_id=user.id, token_id=token_id
+    existing = UserTrackedBlockchainToken.query.filter_by(
+        user_id=user.id, blockchain_token_id=blockchain_token_id
     ).first()
     if existing:
         return existing
-    tracked = UserTrackedTokens(user_id=user.id, token_id=token_id)
+    tracked = UserTrackedBlockchainToken(
+        user_id=user.id, blockchain_token_id=blockchain_token_id
+    )
     db.session.add(tracked)
     db.session.commit()
     return tracked
 
 
-def remove_tracked_token(user: User, token_id: int) -> bool:
+def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
     """
     Удаляет токен из списка отслеживаемых пользователем.
 
     Args:
         user (User): Пользователь.
-        token_id (int): ID токена для удаления.
+        blockchain_token_id (int): ID токена для удаления.
 
     Returns:
         bool: True, если токен был удалён, False если токен не найден в списке.
@@ -324,8 +335,8 @@ def remove_tracked_token(user: User, token_id: int) -> bool:
     Raises:
         Exception: При ошибках удаления из базы данных.
     """
-    tracked = UserTrackedTokens.query.filter_by(
-        user_id=user.id, token_id=token_id
+    tracked = UserTrackedBlockchainToken.query.filter_by(
+        user_id=user.id, blockchain_token_id=blockchain_token_id
     ).first()
     if not tracked:
         return False
@@ -360,15 +371,17 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     if not wallet:
         return {}
 
-    tokens = get_tracked_tokens(user, network)
-    if not tokens:
+    blockchain_tokens = get_tracked_blockchain_tokens(
+        user, network
+    )
+    if not blockchain_tokens:
         return {}
 
     balance_of_abi = abi["balanceOf"]
     decimals_abi = abi["decimals"]
 
     calls = []
-    for token in tokens:
+    for token in blockchain_tokens:
         token_address = _to_checksum(token.contract_address)
         # Запрос баланса
         calls.append(
@@ -394,7 +407,7 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     results = multi()
 
     balances = {}
-    for token in tokens:
+    for token in blockchain_tokens:
         balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
         decimals = results.get(f"{token.symbol}.decimals", 18) or 18
         balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
@@ -402,7 +415,7 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     return balances
 
 
-def get_token_balance(
+def get_blockchain_token_balance(
     user_address: str,
     token_contract_address: str,
     network: str,
@@ -421,7 +434,7 @@ def get_token_balance(
     w3, abi = _get_web3_and_abi(network)
     balance_of_abi = abi["balanceOf"]
     decimals_abi = abi["decimals"]
-    return _get_token_balance_from_contract(
+    return _get_blockchain_token_balance_from_contract(
         w3,
         token_contract_address,
         user_address,

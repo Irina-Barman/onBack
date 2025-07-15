@@ -107,8 +107,8 @@ _ref_wd = ns.model(
 )
 
 # --- Модели для токенов ---
-token_out = ns.model(
-    "TokenOut",
+blockchain_token_out = ns.model(
+    "BlockchainTokenOut",
     {
         "id": fields.Integer,
         "symbol": fields.String,
@@ -118,22 +118,22 @@ token_out = ns.model(
 )
 
 balance_out = ns.model(
-    "BalanceOutTokens",
+    "BalanceOutBlockchainTokens",
     {
         "symbol": fields.String,
         "balance": fields.String,  # decimal as string
     },
 )
-add_token_in = ns.model(
-    "AddTokenIn",
+add_blockchain_token_in = ns.model(
+    "AddBlockchainTokenIn",
     {
-        "token_id": fields.Integer(required=True),
+        "blockchain_token_id": fields.Integer(required=True),
     },
 )
-remove_token_in = ns.model(
-    "RemoveTokenIn",
+remove_blockchain_token_in = ns.model(
+    "RemoveBlockchainTokenIn",
     {
-        "token_id": fields.Integer(required=True),
+        "blockchain_token_id": fields.Integer(required=True),
     },
 )
 
@@ -448,8 +448,8 @@ class RefWithdraw(Resource):
 # --- Эндпоинты по токенам с отслеживанием ---
 
 
-@ns.route("/tokens/<string:network>")
-class TokensList(Resource):
+@ns.route("/blockchain_tokens/<string:network>")
+class BlockchainTokensList(Resource):
     """
     Получает список всех активных токенов сети с отметкой, отслеживает ли пользователь каждый из них.
 
@@ -461,26 +461,26 @@ class TokensList(Resource):
     """
 
     @jwt_required()
-    @ns.marshal_list_with(token_out)
+    @ns.marshal_list_with(blockchain_token_out)
     def get(self, network):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
             ns.abort(404, "User not found")
 
-        all_tokens = svc.get_all_active_tokens(network)
+        all_blockchain_tokens = svc.get_all_active_blockchain_tokens(network)
 
-        tracked_tokens = svc.get_tracked_tokens(user, network)
-        tracked_ids = {t.id for t in tracked_tokens}
+        tracked_blockchain_tokens = svc.get_tracked_blockchain_tokens(user, network)
+        tracked_ids = {t.id for t in tracked_blockchain_tokens}
 
         result = []
-        for token in all_tokens:
+        for blockchain_token in all_blockchain_tokens:
             result.append(
                 {
-                    "id": token.id,
-                    "symbol": token.symbol,
-                    "contract_address": token.contract_address,
-                    "tracked": token.id in tracked_ids,
+                    "id": blockchain_token.id,
+                    "symbol": blockchain_token.symbol,
+                    "contract_address": blockchain_token.contract_address,
+                    "tracked": blockchain_token.id in tracked_ids,
                 }
             )
         return result
@@ -493,7 +493,7 @@ class TokensAdd(Resource):
 
     Request JSON:
         {
-            "token_id": int
+            "blockchain_token_id": int
         }
 
     Returns:
@@ -501,7 +501,7 @@ class TokensAdd(Resource):
     """
 
     @jwt_required()
-    @ns.expect(add_token_in)
+    @ns.expect(add_blockchain_token_in)
     def post(self):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
@@ -509,16 +509,16 @@ class TokensAdd(Resource):
             ns.abort(404, "User not found")
 
         data = ns.payload
-        token_id = data.get("token_id")
-        if not token_id:
-            ns.abort(400, "token_id required")
+        blockchain_token_id = data.get("blockchain_token_id")
+        if not blockchain_token_id:
+            ns.abort(400, "blockchain_token_id required")
 
         try:
-            tracked = svc.add_tracked_token(user, token_id)
+            tracked = svc.add_tracked_token(user, blockchain_token_id)
         except Exception as e:
             ns.abort(400, str(e))
 
-        return {"message": "Token added", "token_id": tracked.token_id}, 201
+        return {"message": "Token added", "blockchain_token_id": tracked.blockchain_token_id}, 201
 
 
 @ns.route("/tokens/remove")
@@ -528,7 +528,7 @@ class TokensRemove(Resource):
 
     Request JSON:
         {
-            "token_id": int
+            "blockchain_token_id": int
         }
 
     Returns:
@@ -536,7 +536,7 @@ class TokensRemove(Resource):
     """
 
     @jwt_required()
-    @ns.expect(remove_token_in)
+    @ns.expect(remove_blockchain_token_in)
     def delete(self):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
@@ -544,21 +544,21 @@ class TokensRemove(Resource):
             ns.abort(404, "User not found")
 
         data = ns.payload
-        token_id = data.get("token_id")
-        if not token_id:
-            ns.abort(400, "token_id required")
+        blockchain_token_id = data.get("blockchain_token_id")
+        if not blockchain_token_id:
+            ns.abort(400, "blockchain_token_id required")
 
         try:
-            removed = svc.remove_tracked_token(user, token_id)
+            removed = svc.remove_tracked_token(user, blockchain_token_id)
             if not removed:
                 ns.abort(404, "Token not found in tracked list")
         except Exception as e:
             ns.abort(500, f"Failed to remove token: {e}")
 
         logger.info(
-            f"Пользователь {user.id} удалил токен {token_id} из отслеживаемых"
+            f"Пользователь {user.id} удалил токен {blockchain_token_id} из отслеживаемых"
         )
-        return {"message": "Token removed", "token_id": token_id}, 200
+        return {"message": "Token removed", "blockchain_token_id": blockchain_token_id}, 200
 
 
 @ns.route("/balances/<string:network>")
