@@ -1,377 +1,303 @@
 import os
-from abc import ABC, abstractmethod
 from decimal import Decimal
-from typing import Dict, List, Tuple
+from typing import Tuple
 
-from cryptography.fernet import Fernet
 from tronpy import Tron
 from tronpy.keys import PrivateKey
 from tronpy.providers import HTTPProvider
 from web3 import Web3
 from web3.contract import Contract
 
-from onfine.blockchain.token_abi_loder import abi_by_name
+from onfine.blockchain.token_abi_loder import load_abi
 
-FERNET = Fernet(os.getenv("FERNET_KEY").encode())
+# Загружаем полный ABI стандарта ERC20 один раз для повторного использования
+ERC20_ABI = load_abi()
 
 
-class TokenNetwork(ABC):
-    symbol = "USDT"
-    decimals = 6
+class TokenNetwork:
+    """
+    Абстрактный базовый класс для работы с токенами в разных сетях.
+
+    Атрибуты:
+        decimals (int): Количество десятичных знаков токена (по умолчанию 6).
+
+    Методы (статические, должны быть реализованы в наследниках):
+        generate_wallet() -> Tuple[str, str]:
+            Генерация нового кошелька (адрес и приватный ключ).
+
+        balance(address: str) -> Decimal:
+            Получение баланса токена на указанном адресе.
+
+        estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
+            Оценка комиссии (газа) за перевод токена.
+
+        transfer(pk: str, to_addr: str, amount: Decimal) -> str:
+            Отправка токена с приватного ключа на указанный адрес,
+            возвращает хэш транзакции.
+    """
+
+    decimals = 6  # Значение по умолчанию, может быть переопределено в наследниках
 
     @staticmethod
-    @abstractmethod
     def generate_wallet() -> Tuple[str, str]:
-        """Создает новый кошелек и Return адрес и приватный ключ.
-
-        Returns:
-            Tuple[str, str]: Кортеж с адресом и приватным ключом.
-        """
+        raise NotImplementedError()
 
     @staticmethod
-    @abstractmethod
-    def balance(addr: str) -> Decimal:
-        """Получает баланс токенов по адресу.
-
-        Args:
-            addr (str): Адрес кошелька.
-
-        Returns:
-            Decimal: Баланс токенов.
-        """
+    def balance(address: str) -> Decimal:
+        raise NotImplementedError()
 
     @staticmethod
-    @abstractmethod
     def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
-        """
-        Оценивает комиссию за перевод токенов.
-
-        Args:
-            pk (str): Приватный ключ отправителя.
-            amount (Decimal): Сумма перевода.
-            to_addr (str): Адрес получателя.
-
-        Returns:
-            Decimal: Оцененная комиссия.
-        """
+        raise NotImplementedError()
 
     @staticmethod
-    @abstractmethod
     def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
-        """Переводит токены на указанный адрес.
-
-        Args:
-            pk (str): Приватный ключ отправителя.
-            to_addr (str): Адрес получателя.
-            amount (Decimal): Сумма перевода.
-
-        Returns:
-            str: ID транзакции.
-        """
-
-
-class TokenNetwork:  # noqa F811
-    def __init__(self, network: str):  # noqa ANN204
-        self.network = network
-        self.web3 = self._init_web3()
-        self.abi = abi_by_name()
-
-    def _init_web3(self) -> Web3:
-        if self.network == "erc20":
-            return Web3(Web3.HTTPProvider(os.getenv("ERC_ANKR_HTTP_URL")))
-        elif self.network == "bep20":
-            return Web3(Web3.HTTPProvider(os.getenv("BEP_ANKR_HTTP_URL")))
-        else:
-            raise ValueError(f"Unsupported network: {self.network}")
-
-    def _contract(self, contract_address: str) -> Contract:
-        return self.web3.eth.contract(address=Web3.to_checksum_address(contract_address), abi=self.abi)
-
-    def get_token_balance(self, address: str, token: Dict) -> Dict:  # noqa D102
-        try:
-            contract = self._contract(token["contract"])
-            raw_balance = contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
-            balance = Decimal(raw_balance) / (10 ** token["decimals"])
-            return {"symbol": token["symbol"], "balance": str(balance), "contract": token["contract"]}
-        except Exception as e:
-            return {"symbol": token["symbol"], "balance": "error", "contract": token["contract"], "error": str(e)}
-
-    def get_balances(self, address: str, user_selected_tokens: List[Dict]) -> List[Dict]:  # noqa D102
-        return [self.get_token_balance(address, token) for token in user_selected_tokens]
-
-    def generate_wallet(self) -> Tuple[str, str]:  # noqa D102
-        acc = self.web3.eth.account.create()
-        return acc.address, acc.key.hex()
+        raise NotImplementedError()
 
 
 class ERC20(TokenNetwork):
+    """
+    Класс для работы с ERC20 токенами в сети Ethereum.
+
+    Использует Web3.py для взаимодействия с Ethereum узлом.
+    Все методы статические, работают через переменные класса.
+
+    Атрибуты:
+        decimals (int): Количество десятичных знаков токена (6).
+        w3 (Web3): Экземпляр Web3, инициализированный через HTTP провайдера.
+        contract_addr (str): Адрес контракта токена в сети Ethereum.
+        abi (list): ABI контракта токена (ERC20 стандарт).
+    """
+
+    decimals = 6
     w3 = Web3(Web3.HTTPProvider(os.getenv("ERC_ANKR_HTTP_URL")))
-    contract_addr = Web3.to_checksum_address(os.getenv("USDT_ERC_CONTRACT_ADDR"))
+    contract_addr = Web3.toChecksumAddress(os.getenv("USDT_ERC_CONTRACT_ADDR"))
+    abi = ERC20_ABI
 
     @staticmethod
-    def _contract(abi: list) -> Contract:
-        """Создает и Return объект контракта на основе заданного ABI.
-
-        Args:
-            abi (list): ABI контракта.
-
-        Returns:
-            Contract: Объект контракта, связанный с заданным адресом и ABI.
+    def _contract() -> Contract:
         """
-        return ERC20.w3.eth.contract(address=ERC20.contract_addr, abi=abi)
+        Возвращает объект контракта ERC20 для взаимодействия.
+        """
+        return ERC20.w3.eth.contract(address=ERC20.contract_addr, abi=ERC20.abi)
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
-        """Создает новый кошелек и Return адрес и приватный ключ.
-
-        Returns:
-            Tuple[str, str]: Кортеж с адресом и приватным ключом.
         """
-        acc = ERC20.w3.eth.account.create()
-        return acc.address, acc.key.hex()
+        Генерирует новый Ethereum-адрес и приватный ключ.
+
+        Возвращает:
+            Tuple[str, str]: Кортеж с адресом и приватным ключом в hex.
+        """
+        acct = ERC20.w3.eth.account.create()
+        return acct.address, acct.key.hex()
 
     @staticmethod
     def balance(addr: str) -> Decimal:
         """
-        Получает баланс токена ERC20 для указанного адреса.
+        Получает баланс токена ERC20 на указанном адресе.
 
-        :param addr: Адрес, для которого нужно получить баланс (в формате строки).
-        :return: Баланс токена в виде Decimal.
-        :raises ValueError: Если адрес не является корректным адресом Ethereum.
+        Args:
+            addr (str): Ethereum-адрес.
+
+        Returns:
+            Decimal: Баланс токена с учётом десятичных знаков.
         """
-        abi = [
-            {
-                "constant": True,
-                "inputs": [{"name": "_owner", "type": "address"}],
-                "name": "balanceOf",
-                "outputs": [{"name": "balance", "type": "uint256"}],
-                "type": "function",
-            },
-        ]
+        addr = Web3.toChecksumAddress(addr)
+        contract = ERC20._contract()
+        bal = contract.functions.balanceOf(addr).call()
+        decimals = contract.functions.decimals().call()
+        return Decimal(bal) / (10 ** decimals)
 
-        bal = ERC20._contract(abi).functions.balanceOf(Web3.to_checksum_address(addr)).call()
-        return Decimal(bal) / (10**ERC20.decimals)
-
-    # ---------- gas ----------
     @staticmethod
     def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
         """
-        Оценивает комиссию за транзакцию при переводе токенов ERC20.
-
-        :param pk: Приватный ключ отправителя (в формате строки).
-        :param amount: Сумма токенов для перевода (в формате Decimal).
-        :param to_addr: Адрес получателя (в формате строки).
-        :return: Оценочная комиссия за транзакцию в ETH (в формате Decimal).
-        """
-        from_addr = ERC20.w3.eth.account.privateKeyToAccount(pk).address
-        abi = [
-            {
-                "constant": False,
-                "inputs": [
-                    {"name": "_to", "type": "address"},
-                    {"name": "_value", "type": "uint256"},
-                ],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function",
-            },
-        ]
-        tx = (
-            ERC20._contract(abi)
-            .functions.transfer(
-                Web3.to_checksum_address(to_addr),
-                int(amount * (10**ERC20.decimals)),
-            )
-            .build_transaction({"from": from_addr})
-        )
-        gas = ERC20.w3.eth.estimate_gas(tx)
-        gas_price = ERC20.w3.eth.gas_price
-        return Decimal(gas * gas_price) / (10**18)  # ETH → ETH
-
-    # ---------- transfer ----------
-    @staticmethod
-    def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
-        """Переводит токены на указанный адрес.
+        Оценивает комиссию за перевод ERC20 токена.
 
         Args:
-            pk (str): Приватный ключ отправителя.
+            pk (str): Приватный ключ отправителя в hex.
+            amount (Decimal): Сумма токенов для перевода.
             to_addr (str): Адрес получателя.
-            amount (Decimal): Сумма перевода.
 
         Returns:
-            str: ID транзакции.
+            Decimal: Оценка комиссии в ETH.
         """
         acct = ERC20.w3.eth.account.privateKeyToAccount(pk)
-        nonce = ERC20.w3.eth.get_transaction_count(acct.address)
-        abi = [
+        to_addr = Web3.toChecksumAddress(to_addr)
+        contract = ERC20._contract()
+        tx = contract.functions.transfer(
+            to_addr,
+            int(amount * (10 ** ERC20.decimals)),
+        ).buildTransaction({"from": acct.address})
+        gas = ERC20.w3.eth.estimateGas(tx)
+        gas_price = ERC20.w3.eth.gas_price
+        return Decimal(gas * gas_price) / Decimal(10 ** 18)
+
+    @staticmethod
+    def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
+        """
+        Отправляет ERC20 токены с кошелька, заданного приватным ключом.
+
+        Args:
+            pk (str): Приватный ключ отправителя в hex.
+            to_addr (str): Адрес получателя.
+            amount (Decimal): Количество токенов для перевода.
+
+        Returns:
+            str: Хэш транзакции.
+        """
+        acct = ERC20.w3.eth.account.privateKeyToAccount(pk)
+        to_addr = Web3.toChecksumAddress(to_addr)
+        nonce = ERC20.w3.eth.getTransactionCount(acct.address)
+        contract = ERC20._contract()
+        tx = contract.functions.transfer(
+            to_addr,
+            int(amount * (10 ** ERC20.decimals)),
+        ).buildTransaction(
             {
-                "constant": False,
-                "inputs": [
-                    {"name": "_to", "type": "address"},
-                    {"name": "_value", "type": "uint256"},
-                ],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function",
-            },
-        ]
-        tx = (
-            ERC20._contract(abi)
-            .functions.transfer(
-                Web3.to_checksum_address(to_addr),
-                int(amount * (10**ERC20.decimals)),
-            )
-            .build_transaction(
-                {
-                    "from": acct.address,
-                    "nonce": nonce,
-                    "gasPrice": ERC20.w3.eth.gas_price,
-                },
-            )
+                "from": acct.address,
+                "nonce": nonce,
+                "gasPrice": ERC20.w3.eth.gas_price,
+            }
         )
-        signed = acct.sign_transaction(tx)
-        return ERC20.w3.eth.send_raw_transaction(signed.rawTransaction).hex()
+        signed = acct.signTransaction(tx)
+        tx_hash = ERC20.w3.eth.sendRawTransaction(signed.rawTransaction)
+        return tx_hash.hex()
 
 
 class BEP20(TokenNetwork):
+    """
+    Класс для работы с BEP20 токенами в сети Binance Smart Chain.
+
+    BEP20 — это стандарт токенов, совместимый с ERC20,
+    поэтому используется тот же ABI и аналогичный интерфейс.
+
+    Атрибуты:
+        decimals (int): Количество десятичных знаков (6).
+        w3 (Web3): Экземпляр Web3 для BSC.
+        contract_addr (str): Адрес контракта токена BEP20.
+        abi (list): ABI контракта токена (тот же, что и ERC20).
+    """
+
+    decimals = 6
     w3 = Web3(Web3.HTTPProvider(os.getenv("BEP_ANKR_HTTP_URL")))
-    contract_addr = Web3.to_checksum_address(os.getenv("USDT_BEP_CONTRACT_ADDR"))
+    contract_addr = Web3.toChecksumAddress(os.getenv("USDT_BEP_CONTRACT_ADDR"))
+    abi = ERC20_ABI  # BEP20 — тот же стандарт ERC20
 
     @staticmethod
-    def _contract(abi: List[dict]) -> Contract:
+    def _contract() -> Contract:
         """
-        Создает и Return объект контракта на основе заданного ABI.
-
-        Args:
-            abi (List[dict]): ABI контракта.
-
-        Returns:
-            Contract: Объект контракта, связанный с заданным адресом и ABI.
+        Возвращает объект контракта BEP20 для взаимодействия.
         """
-        return BEP20.w3.eth.contract(address=BEP20.contract_addr, abi=abi)
+        return BEP20.w3.eth.contract(address=BEP20.contract_addr, abi=BEP20.abi)
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """
-        Создает новый кошелек и Return адрес и приватный ключ.
+        Генерирует новый BSC-адрес и приватный ключ.
 
-        Returns:
-            Tuple[str, str]: Кортеж с адресом и приватным ключом.
+        Возвращает:
+            Tuple[str, str]: Кортеж с адресом и приватным ключом в hex.
         """
-        acc = BEP20.w3.eth.account.create()
-        return acc.address, acc.key.hex()
+        acct = BEP20.w3.eth.account.create()
+        return acct.address, acct.key.hex()
 
     @staticmethod
     def balance(addr: str) -> Decimal:
         """
-        Получает баланс токенов по адресу.
+        Получает баланс токена BEP20 на указанном адресе.
 
         Args:
-            addr (str): Адрес кошелька.
+            addr (str): BSC-адрес.
 
         Returns:
-            Decimal: Баланс токенов.
+            Decimal: Баланс токена с учётом десятичных знаков.
         """
-        bal = BEP20._contract(abi_by_name()["balanceOf"]).functions.balanceOf(Web3.to_checksum_address(addr)).call()
-        return Decimal(bal) / (10**BEP20.decimals)
+        addr = Web3.toChecksumAddress(addr)
+        contract = BEP20._contract()
+        bal = contract.functions.balanceOf(addr).call()
+        decimals = contract.functions.decimals().call()
+        return Decimal(bal) / (10 ** decimals)
 
     @staticmethod
     def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
         """
-        Оценивает комиссию за перевод токенов.
+        Оценивает комиссию за перевод BEP20 токена.
 
         Args:
-            pk (str): Приватный ключ отправителя.
-            amount (Decimal): Сумма перевода.
+            pk (str): Приватный ключ отправителя в hex.
+            amount (Decimal): Сумма токенов для перевода.
             to_addr (str): Адрес получателя.
 
         Returns:
-            Decimal: Оцененная комиссия.
+            Decimal: Оценка комиссии в BNB.
         """
-        from_addr = BEP20.w3.eth.account.privateKeyToAccount(pk).address
-        abi = [
-            {
-                "constant": False,
-                "inputs": [
-                    {"name": "_to", "type": "address"},
-                    {"name": "_value", "type": "uint256"},
-                ],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function",
-            },
-        ]
-        tx = (
-            BEP20._contract(abi)
-            .functions.transfer(
-                Web3.to_checksum_address(to_addr),
-                int(amount * (10**BEP20.decimals)),
-            )
-            .build_transaction({"from": from_addr})
-        )
-        gas = BEP20.w3.eth.estimate_gas(tx)
+        acct = BEP20.w3.eth.account.privateKeyToAccount(pk)
+        to_addr = Web3.toChecksumAddress(to_addr)
+        contract = BEP20._contract()
+        tx = contract.functions.transfer(
+            to_addr,
+            int(amount * (10 ** BEP20.decimals)),
+        ).buildTransaction({"from": acct.address})
+        gas = BEP20.w3.eth.estimateGas(tx)
         gas_price = BEP20.w3.eth.gas_price
-        return Decimal(gas * gas_price) / (10**18)  # BNB → BNB
+        return Decimal(gas * gas_price) / Decimal(10 ** 18)
 
     @staticmethod
     def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
         """
-        Переводит токены на указанный адрес.
+        Отправляет BEP20 токены с кошелька, заданного приватным ключом.
 
         Args:
-            pk (str): Приватный ключ отправителя.
+            pk (str): Приватный ключ отправителя в hex.
             to_addr (str): Адрес получателя.
-            amount (Decimal): Сумма перевода.
+            amount (Decimal): Количество токенов для перевода.
 
         Returns:
-            str: ID транзакции.
+            str: Хэш транзакции.
         """
         acct = BEP20.w3.eth.account.privateKeyToAccount(pk)
-        nonce = BEP20.w3.eth.get_transaction_count(acct.address)
-        abi = [
+        to_addr = Web3.toChecksumAddress(to_addr)
+        nonce = BEP20.w3.eth.getTransactionCount(acct.address)
+        contract = BEP20._contract()
+        tx = contract.functions.transfer(
+            to_addr,
+            int(amount * (10 ** BEP20.decimals)),
+        ).buildTransaction(
             {
-                "constant": False,
-                "inputs": [
-                    {"name": "_to", "type": "address"},
-                    {"name": "_value", "type": "uint256"},
-                ],
-                "name": "transfer",
-                "outputs": [{"name": "", "type": "bool"}],
-                "type": "function",
-            },
-        ]
-        tx = (
-            BEP20._contract(abi)
-            .functions.transfer(
-                Web3.to_checksum_address(to_addr),
-                int(amount * (10**BEP20.decimals)),
-            )
-            .build_transaction(
-                {
-                    "from": acct.address,
-                    "nonce": nonce,
-                    "gasPrice": BEP20.w3.eth.gas_price,
-                },
-            )
+                "from": acct.address,
+                "nonce": nonce,
+                "gasPrice": BEP20.w3.eth.gas_price,
+            }
         )
-        signed = acct.sign_transaction(tx)
-        return BEP20.w3.eth.send_raw_transaction(signed.rawTransaction).hex()
+        signed = acct.signTransaction(tx)
+        tx_hash = BEP20.w3.eth.sendRawTransaction(signed.rawTransaction)
+        return tx_hash.hex()
 
 
 class TRC20(TokenNetwork):
+    """
+    Класс для работы с TRC20 токенами в сети Tron.
+
+    Использует библиотеку tronpy для взаимодействия с TronGrid API.
+
+    Атрибуты:
+        decimals (int): Количество десятичных знаков токена (6).
+        client (Tron): Клиент TronPy с HTTP провайдером.
+        contract_addr (str): Адрес контракта TRC20 токена.
+    """
+
+    decimals = 6
     client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
     contract_addr = os.getenv("USDT_TRC_CONTRACT_ADDR")
-    decimals = 6
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """
-        Создает новый TRON кошелек.
+        Генерирует новый Tron-кошелёк.
 
-        Returns:
-            Tuple[str, str]: Кортеж из двух строк:
-                - base58check адрес кошелька,
-                - приватный ключ в шестнадцатеричном формате.
+        Возвращает:
+            Tuple[str, str]: Кортеж с адресом в base58check и приватным ключом.
         """
         acc = TRC20.client.generate_address()
         return acc["base58check_address"], acc["private_key"]
@@ -379,88 +305,84 @@ class TRC20(TokenNetwork):
     @staticmethod
     def balance(addr: str) -> Decimal:
         """
-        Получает баланс TRC20 токенов для указанного адреса.
+        Получает баланс TRC20 токена на указанном адресе.
 
         Args:
-            addr (str): Адрес TRON кошелька (base58check формат).
+            addr (str): Tron адрес (base58check).
 
         Returns:
-            Decimal: Баланс токенов с учётом десятичных знаков.
+            Decimal: Баланс токена с учётом десятичных знаков.
+            В случае ошибки возвращает 0 и выводит сообщение.
         """
         try:
             contract = TRC20.client.get_contract(TRC20.contract_addr)
             bal = contract.functions.balanceOf(addr).call()
-            return Decimal(bal) / (10**TRC20.decimals)
+            return Decimal(bal) / (10 ** TRC20.decimals)
         except Exception as e:
-            print(f"Error getting TRC20 balance for {addr}: {e}")  # noqa T201
+            print(f"Error getting TRC20 balance for {addr}: {e}")
             return Decimal(0)
 
     @staticmethod
     def estimate_fee(pk: str, amount: Decimal, to_addr: str) -> Decimal:
         """
-        Оценивает комиссию за перевод TRC20 токенов.
+        Оценивает комиссию за перевод TRC20 токена.
 
         Args:
-            pk (str): Приватный ключ отправителя в hex формате.
-            amount (Decimal): Сумма перевода токенов.
-            to_addr (str): Адрес получателя (base58check формат).
+            pk (str): Приватный ключ отправителя в hex.
+            amount (Decimal): Сумма токенов для перевода.
+            to_addr (str): Адрес получателя.
 
         Returns:
-            Decimal: Оцененная комиссия в TRX.
+            Decimal: Оценка комиссии в TRX.
         """
         priv = PrivateKey(bytes.fromhex(pk))
         contract = TRC20.client.get_contract(TRC20.contract_addr)
-
-        # Формируем транзакцию вызова transfer с лимитом комиссии (fee_limit)
         txn = (
             contract.functions.transfer(
                 to_addr,
-                int(amount * (10**TRC20.decimals)),
+                int(amount * (10 ** TRC20.decimals)),
             )
             .with_owner(priv.public_key.to_base58check_address())
-            .fee_limit(10_000_000)  # 10 TRX в сун (1 TRX = 1_000_000 сун)
+            .fee_limit(10_000_000)  # Максимальная комиссия 10 TRX (в сун)
             .build()
         )
-        # Возвращаем fee_limit в TRX
         return Decimal(txn.fee_limit) / Decimal(1_000_000)
 
     @staticmethod
     def transfer(pk: str, to_addr: str, amount: Decimal) -> str:
         """
-        Выполняет перевод TRC20 токенов на указанный адрес.
+        Отправляет TRC20 токены с кошелька, заданного приватным ключом.
 
         Args:
-            pk (str): Приватный ключ отправителя в hex формате.
-            to_addr (str): Адрес получателя (base58check формат).
-            amount (Decimal): Сумма перевода токенов.
+            pk (str): Приватный ключ отправителя в hex.
+            to_addr (str): Адрес получателя.
+            amount (Decimal): Количество токенов для перевода.
 
-        Returns:
+        Возвращает:
             str: ID транзакции (txid).
 
-        Raises:
+        Исключения:
             Exception: Если транзакция не была успешно отправлена.
         """
         priv = PrivateKey(bytes.fromhex(pk))
         contract = TRC20.client.get_contract(TRC20.contract_addr)
-
         txn = (
             contract.functions.transfer(
                 to_addr,
-                int(amount * (10**TRC20.decimals)),
+                int(amount * (10 ** TRC20.decimals)),
             )
             .with_owner(priv.public_key.to_base58check_address())
             .fee_limit(10_000_000)
             .build()
             .sign(priv)
         )
-
         result = txn.broadcast()
         if not result["result"]:
             raise Exception(f"TRC20 transfer failed: {result}")
-
         return result["txid"]
 
 
+# Пример использования (закомментирован)
 # if __name__ == "__main__":
 #     blockcain = TokenNetwork("erc20")
 #     blockcain_bep = TokenNetwork("bep20")
