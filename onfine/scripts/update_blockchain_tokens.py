@@ -104,6 +104,31 @@ tokens = [
 ]
 
 
+# Добавляем нативные токены газа для сетей
+native_gas_tokens = [
+    {
+        "network": "ethereum",
+        "symbol": "ETH",
+        "contract_address": None,
+        "decimals": 18,
+        "is_native_gas": True,
+    },
+    {
+        "network": "bsc",
+        "symbol": "BNB",
+        "contract_address": None,
+        "decimals": 18,
+        "is_native_gas": True,
+    },
+    {
+        "network": "tron",
+        "symbol": "TRX",
+        "contract_address": None,
+        "decimals": 6,  # В Tron обычно 6 десятичных
+        "is_native_gas": True,
+    },
+]
+
 # Папка для сохранения ABI файлов
 ABI_DIR = "abi"
 os.makedirs(ABI_DIR, exist_ok=True)
@@ -111,14 +136,15 @@ os.makedirs(ABI_DIR, exist_ok=True)
 
 def seed_tokens() -> None:
     """
-    Добавляет токены из списка `tokens` в базу данных, если их там нет.
+    Добавляет токены из списка `tokens` и нативные токены газа в базу данных, если их там нет.
     Для каждого токена пытается получить ABI через fetch_abi и сохранить его в файл.
-
-    Логирует процесс и ошибки загрузки ABI.
-    По завершении коммитит изменения в базу.
+    Нативные токены газа не имеют ABI и contract_address.
     """
-    for t in tokens:
-        # Проверяем, есть ли токен уже в базе по сети и символу
+    # Объединяем списки токенов
+    all_tokens = tokens + native_gas_tokens
+
+    for t in all_tokens:
+        # Проверяем, существует ли токен с таким network и symbol
         exists = BlockchainTokens.query.filter_by(
             network=t["network"], symbol=t["symbol"]
         ).first()
@@ -126,17 +152,22 @@ def seed_tokens() -> None:
             print(f"{t['network']}:{t['symbol']} уже существует, пропускаем.")
             continue
 
-        # Создаём объект токена для добавления в базу
         token = BlockchainTokens(
             network=t["network"],
             symbol=t["symbol"],
-            contract_address=t["contract_address"],
-            decimals=t["decimals"],
+            contract_address=t.get("contract_address"),
+            decimals=t.get("decimals", 18),
+            is_native_gas=t.get("is_native_gas", False),
             is_active=True,
             created_at=datetime.utcnow(),
         )
         db.session.add(token)
         print(f"Добавлен токен: {t['network']}:{t['symbol']}")
+
+        # Для нативных токенов газа ABI не загружаем
+        if token.is_native_gas:
+            print(f"Нативный токен газа {t['symbol']} - ABI не требуется.")
+            continue
 
         # Пытаемся получить ABI и сохранить в файл
         try:
@@ -152,13 +183,11 @@ def seed_tokens() -> None:
                 f"Не удалось загрузить ABI для {t['network']}:{t['symbol']} - {e}"
             )
 
-    # Сохраняем все изменения в базе данных
     db.session.commit()
-    print("Готово: Все токены добавлены и ABI сохранены.")
+    print("Готово: Все токены (включая нативные) добавлены и ABI сохранены.")
 
 
 if __name__ == "__main__":
-    # Создаём приложение и запускаем seed_tokens в контексте приложения
     app = create_app()
     with app.app_context():
         seed_tokens()
