@@ -1,8 +1,11 @@
+import json
+import os
 from datetime import datetime
 
 from onfine.app_factory import create_app
 from onfine.extensions import db
 from onfine.models.blockchain_tokens import BlockchainTokens
+from onfine.scripts.abi_loader import fetch_abi
 
 tokens = [
     # ERC20
@@ -80,35 +83,82 @@ tokens = [
         "decimals": 18,
     },
     # TRC20
-    {"network": "TRC20", "symbol": "USDT", "contract_address": "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj", "decimals": 6},
-    {"network": "TRC20", "symbol": "USDC", "contract_address": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8", "decimals": 6},
-    {"network": "TRC20", "symbol": "TUSD", "contract_address": "TD6Eddh6FMSYM8PJhCwRW2V5y3KiLZRnPt", "decimals": 18},
+    {
+        "network": "TRC20",
+        "symbol": "USDT",
+        "contract_address": "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj",
+        "decimals": 6,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "USDC",
+        "contract_address": "TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8",
+        "decimals": 6,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "TUSD",
+        "contract_address": "TD6Eddh6FMSYM8PJhCwRW2V5y3KiLZRnPt",
+        "decimals": 18,
+    },
 ]
 
 
-def seed_tokens() -> None:  # noqa D103
+# Папка для сохранения ABI файлов
+ABI_DIR = "abi"
+os.makedirs(ABI_DIR, exist_ok=True)
+
+
+def seed_tokens() -> None:
+    """
+    Добавляет токены из списка `tokens` в базу данных, если их там нет.
+    Для каждого токена пытается получить ABI через fetch_abi и сохранить его в файл.
+
+    Логирует процесс и ошибки загрузки ABI.
+    По завершении коммитит изменения в базу.
+    """
     for t in tokens:
-        exists = BlockchainTokens.query.filter_by(network=t["network"], symbol=t["symbol"]).first()
+        # Проверяем, есть ли токен уже в базе по сети и символу
+        exists = BlockchainTokens.query.filter_by(
+            network=t["network"], symbol=t["symbol"]
+        ).first()
         if exists:
-            print(f"{t['network']}:{t['symbol']} уже существует, пропускаем.")  # noqa T201
+            print(f"{t['network']}:{t['symbol']} уже существует, пропускаем.")
             continue
 
+        # Создаём объект токена для добавления в базу
         token = BlockchainTokens(
             network=t["network"],
             symbol=t["symbol"],
             contract_address=t["contract_address"],
             decimals=t["decimals"],
             is_active=True,
-            created_at=datetime.utcnow(),  # noqa DTZ003
+            created_at=datetime.utcnow(),
         )
         db.session.add(token)
-        print(f"Добавлен токен: {t['network']}:{t['symbol']}")  # noqa T201
+        print(f"Добавлен токен: {t['network']}:{t['symbol']}")
 
+        # Пытаемся получить ABI и сохранить в файл
+        try:
+            abi = fetch_abi(t["network"], t["contract_address"])
+            abi_path = os.path.join(
+                ABI_DIR, f"{t['network'].lower()}_{t['symbol'].lower()}.json"
+            )
+            with open(abi_path, "w", encoding="utf-8") as f:
+                json.dump(abi, f, indent=2, ensure_ascii=False)
+            print(f"ABI сохранён в {abi_path}")
+        except Exception as e:
+            print(
+                f"Не удалось загрузить ABI для {t['network']}:{t['symbol']} - {e}"
+            )
+
+    # Сохраняем все изменения в базе данных
     db.session.commit()
-    print("Готово: Все токены добавлены.")  # noqa T201
+    print("Готово: Все токены добавлены и ABI сохранены.")
 
 
 if __name__ == "__main__":
+    # Создаём приложение и запускаем seed_tokens в контексте приложения
     app = create_app()
     with app.app_context():
         seed_tokens()
