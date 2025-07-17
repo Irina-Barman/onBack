@@ -106,7 +106,7 @@ _ref_wd = ns.model(
 
 
 # ---------- /create_wallet ----------
-@ns.route("/create_wallet")
+@ns.route("/create-wallet")
 class WalletCreate(Resource):
     @jwt_required()
     @ns.expect(_empty)
@@ -138,7 +138,7 @@ class WalletCreate(Resource):
 
 
 # ---------- /get_wallet ----------
-@ns.route("/get_wallet")
+@ns.route("/get-wallet")
 class WalletGet(Resource):
     @jwt_required()
     @ns.expect(_empty)
@@ -175,7 +175,7 @@ class WalletGet(Resource):
 
 
 # ---------- /transfer_fee ----------
-@ns.route("/transfer_fee")
+@ns.route("/transfer-fee")
 class TransferFee(Resource):
     @ns.marshal_with(_fee)
     def get(self) -> Dict[str, str]:
@@ -311,7 +311,7 @@ class Transactions(Resource):
 
 
 # ---------- /check_wallet ----------
-@ns.route("/check_wallet")
+@ns.route("/check-wallet")
 class CheckWallet(Resource):
     @ns.expect(_check_in)
     @ns.marshal_with(_check_out)
@@ -329,7 +329,7 @@ class CheckWallet(Resource):
 
 
 # ---------- /referral_balance ----------
-@ns.route("/referral_balance")
+@ns.route("/referral-balance")
 class RefBal(Resource):
     @jwt_required()
     @ns.marshal_with(_ref_bal)
@@ -354,7 +354,7 @@ class RefBal(Resource):
 
 
 # ---------- /referral_withdraw ----------
-@ns.route("/referral_withdraw")
+@ns.route("/referral-withdraw")
 class RefWithdraw(Resource):
     @jwt_required()
     @ns.expect(_ref_wd)
