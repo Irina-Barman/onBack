@@ -290,7 +290,6 @@ class Balance(Resource):
 @ns.route("/transactions")
 class Transactions(Resource):
     @jwt_required()
-    @ns.expect(_empty)
     @ns.marshal_list_with(_tx)
     def get(self) -> List[Dict[str, Any]]:
         """
