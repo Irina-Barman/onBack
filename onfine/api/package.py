@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
 
+from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
@@ -12,6 +13,7 @@ ns = Namespace("packages", description="Каталог пакетов и пок�
 err(ns)
 
 # ---------- swagger models ----------
+
 _pkg = ns.model(
     "Package",
     {
@@ -36,20 +38,28 @@ _gas = ns.model(
 
 _buy_in = ns.model(
     "BuyIn",
-    {  # тело запроса
-        "package_id": fields.Integer(required=True),
-        "network": fields.String(required=True, enum=["bep", "erc", "trc"]),
+    {  # тело запроса для покупки
+        "package_id": fields.Integer(
+            required=True, description="ID пакета для покупки"
+        ),
+        "network": fields.String(
+            required=True,
+            enum=["bep", "erc", "trc"],
+            description="Сеть для оплаты",
+        ),
     },
 )
 
 _buy_out = ns.model(
     "PurchaseOut",
-    {  # тело ответа
-        "purchase_id": fields.Integer,
-        "status": fields.String,
-        "summ": fields.String,
-        "gas": fields.String,
-        "from_database": fields.Boolean,  # возвращаем флаг
+    {  # тело ответа после создания/получения покупки
+        "purchase_id": fields.Integer(description="ID покупки"),
+        "status": fields.String(description="Статус покупки"),
+        "summ": fields.String(description="Сумма в USDT"),
+        "gas": fields.String(description="Стоимость газа в USDT"),
+        "from_database": fields.Boolean(
+            description="Флаг, указывающий, что покупка взята из базы"
+        ),
     },
 )
 
@@ -66,8 +76,19 @@ _confirm_in = ns.model(
 _confirm_out = ns.model(
     "ConfirmOut",
     {
-        "purchase_id": fields.Integer,
-        "status": fields.String,
+        "purchase_id": fields.Integer(description="ID покупки"),
+        "status": fields.String(
+            description="Статус покупки после подтверждения"
+        ),
+    },
+)
+
+_package_list_model = ns.model(
+    "PackageList",
+    {
+        "items": fields.List(
+            fields.Nested(_pkg), description="Список пакетов"
+        ),
     },
 )
 
@@ -75,14 +96,16 @@ _confirm_out = ns.model(
 # ---------- /packages ----------
 @ns.route("/")
 class PackageList(Resource):
-    @ns.marshal_list_with(_pkg)
-    def get(self) -> List[Dict[str, Any]]:
-        """Получает список доступных пакетов.
-
-        Return:
-            list: Список объектов пакетов.
+    @ns.marshal_with(_package_list_model)
+    def get(self) -> Dict[str, List[Dict[str, Any]]]:
         """
-        return svc.list_packages()
+        Получает список доступных пакетов.
+
+        Returns:
+            dict: Словарь с ключом "items", содержащий список пакетов.
+        """
+        packages = svc.list_packages()
+        return {"items": packages}
 
 
 # ---------- /packages/gas ----------
@@ -90,9 +113,10 @@ class PackageList(Resource):
 class Gas(Resource):
     @ns.marshal_with(_gas)
     def get(self) -> Dict[str, str]:
-        """Получает информацию о газовых сетях.
+        """
+        Получает информацию о газовых сетях.
 
-        Return:
+        Returns:
             dict: Словарь с информацией о газовых сетях.
         """
         return {k: str(v) for k, v in svc.gas_table().items()}
@@ -102,24 +126,25 @@ class Gas(Resource):
 @ns.route("/purchases")
 class Purchase(Resource):
     @jwt_required()
-    @ns.expect(_buy_in)  # показывает body в Swagger
+    @ns.expect(_buy_in)
     @ns.marshal_with(_buy_out, code=201)
-    def post(self) -> Dict[str, Any]:
-        """Создает или возвращает ожидающую покупку пакета.
+    def post(self) -> tuple[Dict[str, Any], int]:
+        """
+        Создает или возвращает ожидающую покупку пакета.
 
-        Return:
-            dict: Информация о покупке, включая ID, статус, сумму и газ.
+        Получает данные из тела запроса (JSON) с package_id и network.
+
+        Returns:
+            tuple: Кортеж из словаря с информацией о покупке и HTTP-кода 201.
         """
         user = User.query.get(get_jwt_identity())
-        data = ns.payload
+        data: Dict[str, Any] = request.json  # безопасный доступ к телу запроса
 
-        # Проверяем наличие существующей покупки с статусом 'pending'
         purchase_result = svc.check_or_create_purchase(
             user,
             package_id=data["package_id"],
             network=data["network"],
         )
-
         p = purchase_result["purchase"]
         from_database = purchase_result["from_database"]
 
@@ -128,7 +153,7 @@ class Purchase(Resource):
             "status": p.status.value,
             "summ": str(p.amount_usdt),
             "gas": str(p.gas_usdt),
-            "from_database": from_database,  # флаг, откуда получены данные
+            "from_database": from_database,
         }, 201
 
 
@@ -139,14 +164,17 @@ class PurchaseConfirm(Resource):
     @ns.expect(_confirm_in)
     @ns.marshal_with(_confirm_out)
     def post(self, purchase_id: int) -> Dict[str, Any]:
-        """Подтверждает оплату (или отменяет).
+        """
+        Подтверждает оплату (или отменяет).
 
-        Аргументы:
+        Args:
             purchase_id (int): ID покупки для подтверждения.
 
-        Return:
+        Returns:
             dict: Информация о подтвержденной покупке, включая ID и статус.
         """
-        success = ns.payload["success"]
+        data: Dict[str, Any] = request.json
+        success: bool = data["success"]
+
         p = svc.process_purchase_confirmation(purchase_id, success)
         return {"purchase_id": p.id, "status": p.status.value}
