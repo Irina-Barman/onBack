@@ -67,6 +67,23 @@ services:
     depends_on:
       - kafka
 
+  email_consumer:
+    build:
+      context: .
+      dockerfile: Dockerfile.email_consumer  # отдельный Dockerfile для консьюмера
+    env_file: .env
+    environment:
+      KAFKA_BOOTSTRAP: kafka:9092
+      KAFKA_TOPIC: email_topic
+      KAFKA_GROUP_ID: email_consumer_group
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   pgdata:
   kafka_data:
