@@ -28,8 +28,7 @@ class EmailLog(db.Model):
 
     id = db.Column(
         db.BigInteger,
-        primary_key=True,
-        comment="Автоинкрементный первичный ключ записи",
+        primary_key=True,  # Автоинкрементный первичный ключ записи
     )
 
     uid = db.Column(
@@ -37,56 +36,52 @@ class EmailLog(db.Model):
         unique=True,
         nullable=False,
         default=lambda: str(uuid.uuid4()),
-        index=True,
-        comment="Уникальный UUID записи (строка формата UUID)",
+        index=True,  # Уникальный UUID записи (строка формата UUID)
     )
 
     user_uid = db.Column(
         db.String(36),
         db.ForeignKey("users.uid"),
         nullable=True,
-        index=True,
-        comment="UUID пользователя, которому отправлено письмо (может быть NULL)",
+        index=True,  # UUID пользователя, которому отправлено письмо (может быть NULL)
     )
 
     email_to = db.Column(
         db.String(255),
         nullable=False,
-        index=True,
-        comment="Email адрес получателя письма",
+        index=True,  # Email адрес получателя письма
     )
 
     subject = db.Column(db.String(255), nullable=False, comment="Тема письма")
 
     body = db.Column(
-        db.Text, nullable=True, comment="Текст письма (может отсутствовать)"
+        db.Text,
+        nullable=True,  # Текст письма (может отсутствовать)
     )
 
     sent_at = db.Column(
         db.DateTime,
         default=datetime.utcnow,
-        nullable=False,
-        comment="Дата и время отправки письма в UTC",
+        nullable=False,  # Дата и время отправки письма в UTC",
     )
 
     success = db.Column(
         db.Boolean,
         default=True,
-        nullable=False,
-        comment="Флаг успешной отправки (True — письмо отправлено успешно)",
+        nullable=False,  # Флаг успешной отправки (True — письмо отправлено успешно
     )
 
     error_message = db.Column(
         db.Text,
-        nullable=True,
-        comment="Текст ошибки, если отправка письма не удалась",
+        nullable=True,  # Текст ошибки, если отправка письма не удалась
     )
 
     # Связь с моделью User по полю user_uid
     user = db.relationship(
         "User",
-        backref=db.backref("email_logs", lazy=True),
-        comment="Связь с пользователем, которому отправлено письмо",
+        backref=db.backref(
+            "email_logs", lazy=True
+        ),  #  Связь с пользователем, которому отправлено письмо
     )
 
     def __repr__(self):
