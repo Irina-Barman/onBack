@@ -1,3 +1,15 @@
+"""
+Модуль mailer — утилиты для генерации и отправки email с использованием шаблонов Jinja2 и SendGrid.
+
+Функциональность:
+- Загрузка HTML-шаблонов писем из папки email_templates.
+- Генерация HTML на основе шаблона и контекста.
+- Отправка email через SendGrid API или логирование письма при отсутствии API ключа.
+
+Переменные окружения:
+- SENDGRID_API_KEY — API ключ для SendGrid. Если не задан, письма не отправляются, а логируются.
+"""
+
 import logging
 import os
 from pathlib import Path
@@ -6,8 +18,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
 
-# Настройка логирования с уровнем INFO
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Определяем абсолютный путь к корню проекта и папке с email-шаблонами
@@ -27,12 +37,17 @@ env = Environment(
 
 def generate_html(template_type: str, context: dict) -> str:
     """
-    Генерирует HTML содержимое письма на основе шаблона и переданного контекста.
+    Генерирует HTML-содержимое email на основе шаблона и контекста.
 
-    :param template_type: Имя шаблона без расширения (например, "welcome_email")
-    :param context: Словарь с данными для подстановки в шаблон
-    :return: Сгенерированный HTML-код письма
-    :raises: Исключение при ошибках загрузки или рендеринга шаблона
+    Args:
+        template_type (str): Имя шаблона без расширения (например, "welcome_email").
+        context (dict): Словарь с данными для подстановки в шаблон.
+
+    Return:
+        str: Сгенерированный HTML код письма.
+
+    Exceptions:
+        Любые ошибки загрузки или рендеринга шаблона вызывают исключение.
     """
     try:
         # Загружаем шаблон по имени
@@ -46,15 +61,19 @@ def generate_html(template_type: str, context: dict) -> str:
 
 def send_email(to: str, subject: str, body: str) -> None:
     """
-    Отправляет email с помощью SendGrid.
+    Отправляет email через SendGrid или логирует письмо если API ключ отсутствует.
 
-    Если переменная окружения SENDGRID_API_KEY не задана,
-    письмо логируется в консоль (удобно для локальной разработки).
+    Args:
+        to (str): Email адрес получателя.
+        subject (str): Тема письма.
+        body (str): HTML содержимое письма.
 
-    :param to: Email адрес получателя
-    :param subject: Тема письма
-    :param body: HTML-содержимое письма
-    :raises: Исключение при ошибках отправки через SendGrid
+    Поведение:
+        - Если переменная окружения SENDGRID_API_KEY не задана, письмо выводится в лог.
+        - При наличии ключа отправляет письмо через SendGrid API.
+
+    Exceptions:
+        Выбрасывает исключение при ошибках отправки через SendGrid.
     """
     api_key = os.getenv("SENDGRID_API_KEY")
     if not api_key:
@@ -82,12 +101,15 @@ def send_email_by_template(to: str, template_type: str, context: dict) -> None:
     """
     Генерирует HTML письмо из шаблона с контекстом и отправляет его.
 
-    В контексте можно передать ключ 'subject' для темы письма,
-    если его нет — тема будет по умолчанию "Ваше письмо".
+    Args:
+        to (str): Email адрес получателя.
+        template_type (str): Имя шаблона (без расширения .html).
+        context (dict): Словарь с данными для шаблона, может содержать ключ 'subject' для темы.
 
-    :param to: Email адрес получателя
-    :param template_type: Имя шаблона (без расширения .html)
-    :param context: Словарь с данными для шаблона, может содержать ключ 'subject'
+    Поведение:
+        - Тема письма берется из context['subject'], если отсутствует — используется "Ваше письмо".
+        - Генерирует HTML с помощью generate_html.
+        - Отправляет письмо через send_email.
     """
     subject = context.get("subject", "Ваше письмо")
     html = generate_html(template_type, context)
