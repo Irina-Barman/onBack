@@ -1,58 +1,72 @@
 """
-Модуль mailer — утилиты для генерации и отправки email с использованием шаблонов Jinja2 и SendGrid.
+Модуль email_sender — генерация email-сообщений из шаблонов и публикация их в Kafka.
 
-Функциональность:
-- Загрузка HTML-шаблонов писем из папки email_templates.
-- Генерация HTML на основе шаблона и контекста.
-- Отправка email через SendGrid API или логирование письма при отсутствии API ключа.
+Функционал:
+- Загружает HTML-шаблоны писем из директории с шаблонами (email_templates).
+- Генерирует HTML по заданному типу шаблона и контексту.
+- Публикует сформированное письмо в Kafka-топик для последующей обработки и отправки.
+- Логирует содержание письма (вместо реальной отправки).
+- Обрабатывает ошибки при работе с шаблонами и Kafka.
 
-Переменные окружения:
-- SENDGRID_API_KEY — API ключ для SendGrid. Если не задан, письма не отправляются, а логируются.
+Переменные окружения (с значениями по умолчанию):
+- KAFKA_BOOTSTRAP: адрес Kafka bootstrap-сервера (default: "localhost:9092")
+- KAFKA_TOPIC: имя Kafka-топика для публикации сообщений (default: "mailer_emails")
+
+Зависимости:
+- jinja2 — для шаблонизации email-сообщений
+- kafka-python — для публикации сообщений в Kafka
+- logging — для логирования событий и ошибок
+- pathlib, os — для работы с путями и переменными окружения
 """
 
+import json
 import logging
 import os
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail
+from kafka import KafkaProducer
 
 logger = logging.getLogger(__name__)
 
-# Определяем абсолютный путь к корню проекта и папке с email-шаблонами
-BASE_DIR = (
-    Path(__file__).resolve().parent.parent
-)  # Путь к корню проекта (например, onfine/)
-TEMPLATE_DIR = BASE_DIR / "email_templates"  # Папка с HTML-шаблонами писем
+BASE_DIR = Path(__file__).resolve().parent.parent
+TEMPLATE_DIR = BASE_DIR / "email_templates"
 
-# Инициализация Jinja2 Environment для загрузки шаблонов из TEMPLATE_DIR
 env = Environment(
     loader=FileSystemLoader(str(TEMPLATE_DIR)),
-    autoescape=select_autoescape(
-        ["html", "xml"]
-    ),  # Автоэкранирование для html и xml
+    autoescape=select_autoescape(["html", "xml"]),
 )
+
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
+KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "mailer_emails")
+
+try:
+    producer = KafkaProducer(
+        bootstrap_servers=KAFKA_BOOTSTRAP,
+        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
+    )
+except Exception as e:
+    logger.error(f"Ошибка инициализации Kafka Producer: {e}")
+    producer = None
 
 
 def generate_html(template_type: str, context: dict) -> str:
     """
-    Генерирует HTML-содержимое email на основе шаблона и контекста.
+    Генерирует HTML-содержимое письма по заданному шаблону и контексту.
 
     Args:
-        template_type (str): Имя шаблона без расширения (например, "welcome_email").
+        template_type (str): Имя шаблона (без расширения), например "welcome", "reset_password".
         context (dict): Словарь с данными для подстановки в шаблон.
 
-    Return:
-        str: Сгенерированный HTML код письма.
+    Returns:
+        str: Сформированный HTML-код письма.
 
-    Exceptions:
-        Любые ошибки загрузки или рендеринга шаблона вызывают исключение.
+    Raises:
+        jinja2.TemplateNotFound: если шаблон с указанным именем не найден.
+        jinja2.TemplateError: при ошибках в шаблоне или рендеринге.
     """
     try:
-        # Загружаем шаблон по имени
         template = env.get_template(f"{template_type}.html")
-        # Рендерим шаблон с переданным контекстом
         return template.render(**context)
     except Exception as e:
         logger.error(f"Ошибка генерации шаблона '{template_type}': {e}")
@@ -61,56 +75,56 @@ def generate_html(template_type: str, context: dict) -> str:
 
 def send_email(to: str, subject: str, body: str) -> None:
     """
-    Отправляет email через SendGrid или логирует письмо если API ключ отсутствует.
+    Логирует письмо (имитация отправки email).
 
     Args:
-        to (str): Email адрес получателя.
+        to (str): Email получателя.
         subject (str): Тема письма.
-        body (str): HTML содержимое письма.
+        body (str): HTML-содержимое письма.
 
-    Поведение:
-        - Если переменная окружения SENDGRID_API_KEY не задана, письмо выводится в лог.
-        - При наличии ключа отправляет письмо через SendGrid API.
-
-    Exceptions:
-        Выбрасывает исключение при ошибках отправки через SendGrid.
+    Используется для отладки и тестирования без реальной отправки.
     """
-    api_key = os.getenv("SENDGRID_API_KEY")
-    if not api_key:
-        # В режиме без API-ключа просто логируем письмо
-        logger.warning(f"[MAIL-LOG] To: {to}  Subj: {subject}\n{body}\n")
-        return
-
-    # Создаем объект письма SendGrid
-    message = Mail(
-        from_email="noreply@example.com",
-        to_emails=to,
-        subject=subject,
-        html_content=body,
-    )
-    try:
-        sg = SendGridAPIClient(api_key)
-        response = sg.send(message)
-        logger.info(f"Email sent to {to} with status {response.status_code}")
-    except Exception as e:
-        logger.error(f"SendGrid send error: {e}")
-        raise
+    logger.info(f"[MAIL-LOG] To: {to}  Subj: {subject}\n{body}\n")
 
 
 def send_email_by_template(to: str, template_type: str, context: dict) -> None:
     """
-    Генерирует HTML письмо из шаблона с контекстом и отправляет его.
+    Формирует письмо по шаблону, публикует его в Kafka и логирует.
 
     Args:
-        to (str): Email адрес получателя.
-        template_type (str): Имя шаблона (без расширения .html).
-        context (dict): Словарь с данными для шаблона, может содержать ключ 'subject' для темы.
+        to (str): Email получателя.
+        template_type (str): Имя шаблона письма.
+        context (dict): Контекст для шаблона, может содержать ключ 'subject' с темой письма.
 
-    Поведение:
-        - Тема письма берется из context['subject'], если отсутствует — используется "Ваше письмо".
-        - Генерирует HTML с помощью generate_html.
-        - Отправляет письмо через send_email.
+    Логика:
+    - Генерирует HTML с помощью generate_html.
+    - Формирует сообщение с полями: to, subject, html, template, context.
+    - Отправляет сообщение в Kafka-топик.
+    - Логирует письмо через send_email.
+    - При ошибках логирует исключения.
+
+    Используется для интеграции с системой отправки писем через Kafka.
     """
     subject = context.get("subject", "Ваше письмо")
     html = generate_html(template_type, context)
+
+    # Публикуем сообщение в Kafka
+    if producer:
+        try:
+            msg = {
+                "to": to,
+                "subject": subject,
+                "html": html,
+                "template": template_type,
+                "context": context,
+            }
+            producer.send(KAFKA_TOPIC, msg)
+            producer.flush()
+            logger.info(
+                f"Email message published to Kafka topic '{KAFKA_TOPIC}'"
+            )
+        except Exception as e:
+            logger.error(f"Ошибка отправки сообщения в Kafka: {e}")
+
+    # Логируем письмо
     send_email(to, subject, html)
