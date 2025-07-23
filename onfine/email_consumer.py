@@ -46,7 +46,7 @@ logging.basicConfig(
 logger = logging.getLogger("email_consumer")
 
 # Конфигурация подключения к Kafka и базе данных через переменные окружения
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "email_topic")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "email_consumer_group")
 DATABASE_URL = os.getenv(

@@ -228,4 +228,11 @@ docker compose exec kafka kafka-topics.sh --create \
   --replication-factor 1 \
   --partitions 1 \
   --topic trc20_transfers
+
+# Новый, для email сервиса
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic email_topic
 ```
