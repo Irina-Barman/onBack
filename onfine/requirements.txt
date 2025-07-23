@@ -87,4 +87,4 @@ web3==6.10.0
 websockets==14.2
 Werkzeug==2.3.8
 yarl==1.20.1
-
+sendgrid==6.12.4
