@@ -34,10 +34,11 @@ import os
 from datetime import datetime
 
 from kafka import KafkaConsumer
-from models import EmailLog
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from onfine.models.email_log import EmailLog
 from onfine.services.email_service import EmailService
 
 logging.basicConfig(

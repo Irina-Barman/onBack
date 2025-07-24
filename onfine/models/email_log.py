@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from ..extensions import db
+from onfine.extensions import db
 
 
 class EmailLog(db.Model):

@@ -26,8 +26,10 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from kafka import KafkaProducer
-from models import EmailLog
+
 from sqlalchemy.orm import Session
+
+from onfine.models.email_log import EmailLog
 
 # from onfine.utils.mailer import send_email_by_template
 
