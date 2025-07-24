@@ -107,7 +107,9 @@ class Register(Resource):
         data: Dict[str, Any] = request.json or {}
         email: Optional[str] = data.get("email")
         password: Optional[str] = data.get("password")
-        partner_uid: Optional[str] = data.get("partner_uid") or request.args.get("partner_uid")
+        partner_uid: Optional[str] = data.get(
+            "partner_uid"
+        ) or request.args.get("partner_uid")
 
         try:
             validate_email(email)
@@ -115,10 +117,13 @@ class Register(Resource):
 
             user_exists = User.query.filter_by(email=email).first()
             if user_exists:
-                # Логируем реальную причину на русском
-                logger.warning(f"Попытка регистрации с уже существующим email: {email}")
+                logger.warning(
+                    f"Попытка регистрации с уже существующим email: {email}"
+                )
                 # Возвращаем общее сообщение
-                raise RegistrationError("Registration failed. Please check your input.")
+                raise RegistrationError(
+                    "Registration failed. Please check your input."
+                )
 
             user = AuthService.register_user(
                 email=email,
@@ -132,6 +137,33 @@ class Register(Resource):
         except ValueError as e:
             logger.error(f"Ошибка валидации при регистрации: {str(e)}")
             raise RegistrationError(str(e))
+
+
+# ----------- /resend-confirmation ----------
+@auth_ns.route("/resend-confirmation")
+class ResendConfirmation(Resource):
+    @auth_ns.expect(forgot_in)
+    @auth_ns.marshal_with(msg_out, code=200)
+    @auth_ns.response(400, "Email is required", err_model)
+    @auth_ns.response(500, "Internal server error", err_model)
+    def post(self) -> Tuple[Dict[str, Any], int]:
+        """
+        Повторная отправка письма с подтверждением email.
+
+        Ожидает JSON с полем "email". Если пользователь найден и email
+        не подтверждён, отправляет письмо с подтверждением.
+        """
+        data = request.json or {}
+        email = data.get("email")
+        if not email:
+            return {"error": "Email is required."}, 400
+
+        # Не ловим все исключения, чтобы использовать глобальные обработчики
+        AuthService.resend_confirmation_email(email)
+        return {
+            "message": "If the email exists, confirmation email has been sent."
+        }, 200
+
 
 
 # ----------- /confirm-email ----------
@@ -207,11 +239,17 @@ class ForgotPassword(Resource):
                 AuthService.forgot_password(email)
                 logger.info(f"Отправлено письмо для сброса пароля на: {email}")
             except Exception as e:
-                logger.error(f"Ошибка при отправке письма для сброса пароля на {email}: {str(e)}")
+                logger.error(
+                    f"Ошибка при отправке письма для сброса пароля на {email}: {str(e)}"
+                )
         else:
-            logger.warning(f"Запрос на сброс пароля для несуществующего email: {email}")
+            logger.warning(
+                f"Запрос на сброс пароля для несуществующего email: {email}"
+            )
 
-        return {"message": "If the email exists in our system, a reset link has been sent."}
+        return {
+            "message": "If the email exists in our system, a reset link has been sent."
+        }
 
 
 # ----------- /reset-password ----------
