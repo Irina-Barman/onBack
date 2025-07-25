@@ -1,9 +1,7 @@
 import uuid
 from datetime import datetime, timedelta
 
-from onfine.models.archive_email_confirmation_token import (
-    ArchiveEmailConfirmationToken,
-)
+from sqlalchemy import and_, or_
 
 from ..extensions import db
 
@@ -23,21 +21,24 @@ class EmailConfirmationToken(db.Model):
         created_at (datetime): Время создания токена.
 
     Методы:
-        archive_expired_and_used_tokens(user_id, purpose):
-            Архивирует и удаляет из активных все токены для данного пользователя и цели,
-            которые либо использованы, либо просрочены.
+        deactivate_expired_and_used_tokens(user_id, purpose):
+            Помечает все токены пользователя, которые использованы или просрочены, как использованные.
 
         get_active_token(user_id, purpose):
             Возвращает первый найденный активный (неиспользованный и не просроченный) токен
             для пользователя и указанной цели или None, если такого нет.
 
+        is_active(self):
+            Проверяет, что токен не использован и не просрочен, возвращает булевое значение.
+            (метод для сервиса, чтобы разделять исключения)
+
+
         create(user_id, purpose, ttl_minutes):
             Создает новый токен с заданным временем жизни (в минутах) или возвращает
-            существующий активный токен. Перед созданием нового токена архивирует старые.
+            существующий активный токен. Перед созданием нового токена помечает старые как использованные.
 
     Особенности:
         - Токены уникальны и генерируются с помощью UUID4.
-        - Архивирование помогает сохранять историю токенов и очищать активные записи.
         - Используется явное управление сессией базы данных (flush, commit).
     """
 
@@ -60,46 +61,41 @@ class EmailConfirmationToken(db.Model):
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    @staticmethod
-    def archive_expired_and_used_tokens(user_id: int, purpose: str) -> None:
+    def is_active(self) -> bool:
         """
-        Архивирует и удаляет все токены пользователя,
-        которые уже использованы или срок их действия истек.
+        Проверяет, что токен не использован и не просрочен.
 
-        Процесс:
-        - Находит все такие токены.
-        - Копирует их данные в архивную таблицу ArchiveEmailConfirmationToken.
-        - Удаляет оригинальные записи из текущей таблицы.
-        - Вызывает db.session.flush() для синхронизации сессии,
-          коммит должен быть вызван снаружи после вызова этого метода.
+        :return: True, если токен активен, иначе False.
+        """
+        return (not self.used) and (self.expires_at > datetime.utcnow())
+
+    @staticmethod
+    def deactivate_expired_and_used_tokens(user_id: int, purpose: str) -> None:
+        """
+        Помечает все токены пользователя, которые использованы или просрочены, как использованные.
 
         :param user_id: Идентификатор пользователя.
-        :param purpose: Назначение токена ('confirm_email' или 'reset_pwd').
+        :param purpose: Назначение токена.
         """
-        expired_or_used_tokens = EmailConfirmationToken.query.filter(
-            EmailConfirmationToken.user_id == user_id,
-            EmailConfirmationToken.purpose == purpose,
-            (
-                (EmailConfirmationToken.used.is_(True))
-                | (EmailConfirmationToken.expires_at < datetime.utcnow())
-            ),
-        ).all()
-
-        for t in expired_or_used_tokens:
-            archived = ArchiveEmailConfirmationToken(
-                id=t.id,
-                user_id=t.user_id,
-                token=t.token,
-                purpose=t.purpose,
-                expires_at=t.expires_at,
-                used=t.used,
-                created_at=t.created_at,
-                archived_at=datetime.utcnow(),
+        now = datetime.utcnow()
+        (
+            EmailConfirmationToken.query.filter(
+                EmailConfirmationToken.user_id == user_id,
+                EmailConfirmationToken.purpose == purpose,
+                or_(
+                    EmailConfirmationToken.used.is_(True),
+                    and_(
+                        EmailConfirmationToken.used.is_(False),
+                        EmailConfirmationToken.expires_at < now,
+                    ),
+                ),
             )
-            db.session.add(archived)
-            db.session.delete(t)
-
-        db.session.flush()  # Синхронизируем изменения с базой данных
+            .filter(
+                EmailConfirmationToken.used.is_(False)
+            )  # Обновляем только неиспользованные
+            .update({"used": True}, synchronize_session="fetch")
+        )
+        db.session.flush()
 
     @staticmethod
     def get_active_token(
@@ -135,7 +131,7 @@ class EmailConfirmationToken(db.Model):
         Создает новый токен с указанным временем жизни или возвращает существующий активный.
 
         Логика:
-        - Сначала архивирует все устаревшие и использованные токены.
+        - Сначала помечает все устаревшие и использованные токены как использованные.
         - Проверяет наличие активного токена для данного пользователя и цели.
         - Если активный токен найден, возвращает его.
         - Иначе создает новый токен с уникальным UUID и временем истечения.
@@ -145,8 +141,8 @@ class EmailConfirmationToken(db.Model):
         :param ttl_minutes: Время жизни токена в минутах.
         :return: Объект EmailConfirmationToken.
         """
-        # Архивируем устаревшие и использованные токены
-        EmailConfirmationToken.archive_expired_and_used_tokens(
+        # Помечаем устаревшие и использованные токены
+        EmailConfirmationToken.deactivate_expired_and_used_tokens(
             user_id, purpose
         )
 
