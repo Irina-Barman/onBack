@@ -88,7 +88,7 @@ class AuthService:
         token = EmailConfirmationToken.create(
             user.id,
             purpose="confirm_email",
-            ttl_minutes=1,
+            ttl_minutes=60*24,
         )
         db.session.commit()
 
@@ -127,7 +127,7 @@ class AuthService:
             token = EmailConfirmationToken.create(
                 user.id,
                 purpose="confirm_email",
-                ttl_minutes=5,
+                ttl_minutes=60 * 24,
             )
             db.session.commit()
 
