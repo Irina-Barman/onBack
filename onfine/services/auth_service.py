@@ -3,6 +3,7 @@
 
 Основные функции:
 - Регистрация пользователя с отправкой email-подтверждения.
+- Повторная отправка письма с подтверждением email.
 - Подтверждение email по токену.
 - Вход пользователя с выдачей JWT токена.
 - Запрос на сброс пароля с отправкой ссылки на email.
@@ -15,10 +16,22 @@
 
 Методы:
 - register_user(email: str, password: str, partner_uid: Optional[str]) -> User
+    Регистрирует нового пользователя, создаёт токен подтверждения email и отправляет письмо.
+
+- resend_confirmation_email(email: str) -> None
+    Повторно отправляет письмо с подтверждением email, если пользователь существует и email не подтверждён.
+
 - confirm_email(token_str: str) -> None
+    Подтверждает email пользователя по токену, помечая токен как использованный.
+
 - login_user(email: str, password: str) -> Dict[str, Any]
+    Аутентифицирует пользователя и возвращает JWT access token с временем жизни.
+
 - forgot_password(email: str) -> None
-- reset_password(token: str, new_password: str) -> Dict[str, str]
+    Инициирует процесс сброса пароля, создаёт токен сброса и отправляет письмо.
+
+- reset_password(token_str: str, new_password: str) -> Dict[str, str]
+    Сбрасывает пароль пользователя по валидному токену и помечает токен как использованный.
 
 Исключения:
 - ValueError при ошибках валидации, отсутствии пользователя или недействительных токенах.
@@ -49,33 +62,37 @@ class AuthService:
         password: str,
         partner_uid: Optional[str] = None,
     ) -> User:
-        """Регистрация нового пользователя.
+        """
+        Регистрация нового пользователя с отправкой email-подтверждения.
 
         :param email: Адрес электронной почты пользователя.
         :param password: Пароль пользователя.
-        :param partner_uid: Идентификатор партнера (необязательно).
-        :raises ValueError: Если адрес электронной почты уже зарегистрирован.
-        :return: Зарегистрированный пользователь.
+        :param partner_uid: Идентификатор партнера (опционально).
+        :raises ValueError: Если email или пароль не указаны, либо email уже зарегистрирован.
+        :return: Объект созданного пользователя.
         """
         if not email or not password:
             raise ValueError("Email and password are required.")
 
+        # Проверяем, что email ещё не зарегистрирован
         if User.query.filter_by(email=email).first():
             raise ValueError("Email is already registered.")
 
+        # Создаём пользователя и задаём пароль
         user = User(email=email, partner_uid=partner_uid)
         user.set_password(password)
         db.session.add(user)
-        db.session.flush()  # получаем user.id до коммита
+        db.session.flush()  # Получаем user.id до коммита
 
-        # e-mail confirmation token (24 h)
+        # Создаём токен для подтверждения email (срок 24 часа)
         token = EmailConfirmationToken.create(
             user.id,
             purpose="confirm_email",
-            ttl_minutes=60 * 24,
+            ttl_minutes=1,
         )
         db.session.commit()
 
+        # Формируем ссылку подтверждения и отправляем письмо
         confirm_link = (
             f"{AuthService.BASE_URL}/confirm-email?token={token.token}"
         )
@@ -94,7 +111,7 @@ class AuthService:
         Повторная отправка письма с подтверждением email.
 
         :param email: Email пользователя.
-        :raises ValueError: Если email не найден или уже подтверждён.
+        :raises ValueError: Если пользователь не найден или email уже подтверждён.
         """
         user = User.query.filter_by(email=email).first()
         if not user:
@@ -102,26 +119,19 @@ class AuthService:
         if user.email_confirmed:
             raise ValueError("Email already confirmed.")
 
-        # Ищем активный токен подтверждения
-        now = datetime.utcnow()
-        token = (
-            EmailConfirmationToken.query.filter_by(
-                user_id=user.id,
-                purpose="confirm_email",
-                used=False,
-            )
-            .filter(EmailConfirmationToken.expires_at > now)
-            .first()
+        token = EmailConfirmationToken.get_active_token(
+            user.id, "confirm_email"
         )
 
         if not token:
             token = EmailConfirmationToken.create(
                 user.id,
                 purpose="confirm_email",
-                ttl_minutes=60 * 24,  # сутки
+                ttl_minutes=5,
             )
             db.session.commit()
 
+        # Отправляем письмо с подтверждением
         confirm_link = (
             f"{AuthService.BASE_URL}/confirm-email?token={token.token}"
         )
@@ -135,39 +145,51 @@ class AuthService:
     @staticmethod
     def confirm_email(token_str: str) -> None:
         """
-        Подтверждение адреса электронной почты пользователя.
+        Подтверждение email пользователя по токену.
 
-        :param token_str: Токен подтверждения.
-        :raises ValueError: Если токен недействителен или истек.
+        :param token_str: Токен подтверждения email.
+        :raises ValueError: Если токен недействителен, просрочен или пользователь не найден.
         """
+        # Ищем токен по строке, назначению
         token = EmailConfirmationToken.query.filter_by(
             token=token_str,
             purpose="confirm_email",
-            used=False,
         ).first()
 
-        if token is None or token.expires_at < datetime.utcnow():
-            raise ValueError("Invalid or expired token.")
+        if token is None:
+            raise ValueError("Invalid token.")
+
+        # Проверяем, что токен активен (не использован и не просрочен)
+        if not token.is_active():
+            raise ValueError(
+                "Token expired or already used, request a new one"
+            )
 
         user = User.query.get(token.user_id)
         if not user:
             raise ValueError("User not found.")
 
+        # Подтверждаем email пользователя и помечаем токен как использованный
         user.email_confirmed = True
         token.used = True
+        db.session.flush()  # Фиксируем изменения в сессии перед массовым обновлением
+
+        # Массово деактивируем все просроченные и использованные токены для данного пользователя
+        EmailConfirmationToken.deactivate_expired_and_used_tokens(
+            token.user_id, token.purpose
+        )
         db.session.commit()
 
     # ----------------- LOGIN -----------------
     @staticmethod
     def login_user(email: str, password: str) -> Dict[str, Any]:
         """
-        Вход пользователя в систему.
+        Аутентификация пользователя и выдача JWT токена.
 
-        :param email: Адрес электронной почты пользователя.
+        :param email: Email пользователя.
         :param password: Пароль пользователя.
-        :raises ValueError: Если учетные данные недействительны или
-        адрес электронной почты не подтвержден.
-        :return: Словарь с токеном доступа и информацией о его сроке действия.
+        :raises ValueError: Если данные некорректны или email не подтверждён.
+        :return: Словарь с accessToken, типом токена и временем истечения.
         """
         if not email or not password:
             raise ValueError("Email and password are required.")
@@ -207,10 +229,10 @@ class AuthService:
     @staticmethod
     def forgot_password(email: str) -> None:
         """
-        Запрос на сброс пароля.
+        Инициирует процесс сброса пароля — создаёт токен и отправляет ссылку по email.
 
-        :param email: Адрес электронной почты пользователя.
-        :raises ValueError: Если адрес электронной почты не найден.
+        :param email: Email пользователя.
+        :raises ValueError: Если email не указан или не найден.
         """
         if not email:
             raise ValueError("Email is required.")
@@ -219,10 +241,11 @@ class AuthService:
         if not user:
             raise ValueError("Email not found.")
 
+        # Создаём токен для сброса пароля (24 часа)
         token = EmailConfirmationToken.create(
             user.id,
             purpose="reset_pwd",
-            ttl_minutes=60 * 24,  # сутки
+            ttl_minutes=60 * 24,
         )
         db.session.commit()
 
@@ -235,32 +258,43 @@ class AuthService:
 
     # ----------------- RESET PASSWORD -----------------
     @staticmethod
-    def reset_password(token: str, new_password: str) -> Dict[str, str]:
+    def reset_password(token_str: str, new_password: str) -> Dict[str, str]:
         """
-        Сброс пароля пользователя.
+        Сброс пароля пользователя по токену.
 
-        :param token: Токен сброса пароля.
+        :param token_str: Токен сброса пароля.
         :param new_password: Новый пароль пользователя.
-        :raises ValueError: Если токен недействителен или истек.
-        :return: Словарь с сообщением об успешном изменении пароля.
+        :raises ValueError: Если токен недействителен, просрочен или пользователь не найден.
+        :return: Сообщение об успешном изменении пароля.
         """
-        if not token or not new_password:
-            raise ValueError("Token and new password are required.")
-
-        t = EmailConfirmationToken.query.filter_by(
-            token=token,
+        # Ищем валидный токен сброса пароля
+        token = EmailConfirmationToken.query.filter_by(
+            token=token_str,
             purpose="reset_pwd",
-            used=False,
         ).first()
 
-        if t is None or t.expires_at < datetime.utcnow():
-            raise ValueError("Invalid or expired token.")
+        if token is None:
+            raise ValueError("Invalid token.")
 
-        user = User.query.get(t.user_id)
+        # Проверяем, что токен активен (не использован и не просрочен)
+        if not token.is_active():
+            raise ValueError(
+                "Token expired or already used, request a new one"
+            )
+
+        user = User.query.get(token.user_id)
         if not user:
             raise ValueError("User not found.")
 
+        # Обновляем пароль пользователя и помечаем токен как использованный
         user.set_password(new_password)
-        t.used = True
+        token.used = True
+        db.session.flush()  # Фиксируем изменения перед массовым обновлением
+
+        # Массово деактивируем все просроченные и использованные токены для данного пользователя
+        EmailConfirmationToken.deactivate_expired_and_used_tokens(
+            token.user_id, token.purpose
+        )
         db.session.commit()
+
         return {"message": "Password changed successfully."}

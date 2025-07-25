@@ -165,7 +165,6 @@ class ResendConfirmation(Resource):
         }, 200
 
 
-
 # ----------- /confirm-email ----------
 @auth_ns.route("/confirm-email")
 class ConfirmEmail(Resource):
