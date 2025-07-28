@@ -141,13 +141,21 @@ class AuthService:
             db.session.commit()
 
         # Отправляем письмо с подтверждением
-        confirm_link = (
-            f"{AuthService.BASE_URL}/confirm-email?token={token.token}"
-        )
-        send_email(
-            email,
-            "Confirm your email",
-            f"Click the link to confirm your email: {confirm_link}",
+        confirm_link = f"https://example.com/confirm-email?token={token.token}"
+
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Подтверждение регистрации",
+            "confirm_link": confirm_link,
+            "user_email": user.email,
+        }
+
+        email_service.send_and_log(
+            to=user.email,
+            template_type="registration_confirmation.html",
+            context=context,
         )
 
     # ----------------- CONFIRM EMAIL -----------------
