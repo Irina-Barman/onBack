@@ -37,8 +37,8 @@ env = Environment(
     autoescape=select_autoescape(["html", "xml"]),
 )
 
-KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "mailer_emails")
+KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
+KAFKA_TOPIC = os.getenv("MAILER_TOPIC", "mailer_emails")
 
 try:
     producer = KafkaProducer(

@@ -26,7 +26,6 @@ from datetime import datetime
 from typing import Dict, Optional
 
 from kafka import KafkaProducer
-
 from sqlalchemy.orm import Session
 
 from onfine.models.email_log import EmailLog
@@ -65,8 +64,8 @@ class EmailService:
         """
         self.db_session = db_session
 
-        kafka_servers = os.getenv("KAFKA_BOOTSTRAP", "localhost:9092")
-        self.kafka_topic = os.getenv("KAFKA_TOPIC", "mailer_emails")
+        kafka_servers = os.getenv("KAFKA_BOOTSTRAP", "=kafka:9092")
+        self.kafka_topic = os.getenv("MAILER_TOPIC", "mailer_emails")
         try:
             self.producer = KafkaProducer(
                 bootstrap_servers=kafka_servers,

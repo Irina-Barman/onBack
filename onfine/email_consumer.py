@@ -2,7 +2,7 @@
 Модуль email_consumer — Kafka-консьюмер для обработки сообщений с данными для отправки email.
 
 Функционал:
-- Подключается к Kafka-топику, указанному в переменной окружения KAFKA_TOPIC.
+- Подключается к Kafka-топику, указанному в переменной окружения EMAIL_TOPIC.
 - Получает сообщения в формате JSON с полями:
     - "to": адрес получателя письма (str)
     - "template_type": тип шаблона письма (str)
@@ -47,7 +47,7 @@ logger = logging.getLogger("email_consumer")
 
 # Конфигурация подключения к Kafka и базе данных через переменные окружения
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "email_topic")
+KAFKA_TOPIC = os.getenv("EMAIL_TOPIC", "email_topic")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "email_consumer_group")
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://user:password@db/dbname"
