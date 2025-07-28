@@ -1,7 +1,7 @@
 import logging
 from typing import Any, Dict, Optional, Tuple
 
-from flask import request
+from flask import render_template_string, request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
@@ -188,6 +188,28 @@ class ConfirmEmail(Resource):
             return {"message": "Email confirmed."}
         except ValueError as e:
             raise EmailConfirmationError(str(e))
+
+    def get(self):
+        """
+        Подтверждение email-адреса пользователя через GET.
+
+        Получает токен из параметра URL ?token=...
+        Возвращает HTML-страницу с результатом.
+        """
+        token = request.args.get("token")
+        if not token:
+            return render_template_string(
+                "<h1>Ошибка: токен подтверждения не найден.</h1>"
+            ), 400
+        try:
+            AuthService.confirm_email(token)
+            return render_template_string(
+                "<h1>Ваш email успешно подтверждён!</h1>"
+            )
+        except ValueError as e:
+            return render_template_string(
+                f"<h1>Ошибка подтверждения: {str(e)}</h1>"
+            ), 400
 
 
 # ----------- /login ----------
