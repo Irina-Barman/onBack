@@ -284,11 +284,22 @@ class AuthService:
         db.session.commit()
 
         reset_link = f"{AuthService.BASE_URL}/reset?token={token.token}"
-        send_email(
-            email,
-            "Password reset",
-            f"Click the link to reset your password: {reset_link}",
+
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Сброс пароля",
+            "reset_link": reset_link,
+            "user_email": user.email,
+        }
+
+        email_service.send_and_log(
+            to=user.email,
+            template_type="password_reset.html.html",  # или подходящий шаблон
+            context=context,
         )
+
 
     # ----------------- RESET PASSWORD -----------------
     @staticmethod
