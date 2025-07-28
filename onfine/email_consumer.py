@@ -16,7 +16,7 @@
 - Обрабатывает корректное завершение работы по таймауту ожидания сообщений или сигналам прерывания.
 
 Переменные окружения (с значениями по умолчанию):
-- KAFKA_BOOTSTRAP: адрес Kafka bootstrap-сервера (default: "localhost:9092")
+- KAFKA_BOOTSTRAP: адрес Kafka bootstrap-сервера
 - KAFKA_TOPIC: имя Kafka-топика для чтения сообщений (default: "email_topic")
 - KAFKA_GROUP_ID: ID группы консьюмера Kafka (default: "email_consumer_group")
 - DATABASE_URL: строка подключения к базе данных PostgreSQL (default: "postgresql://user:password@db/dbname")
@@ -34,7 +34,6 @@ import os
 from datetime import datetime
 
 from kafka import KafkaConsumer
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
