@@ -198,18 +198,13 @@ class ConfirmEmail(Resource):
         """
         token = request.args.get("token")
         if not token:
-            return render_template_string(
-                "<h1>Ошибка: токен подтверждения не найден.</h1>"
-            ), 400
+            return render_template_string("<h1>Error: Verification token not found.</h1>"), 400
         try:
             AuthService.confirm_email(token)
-            return render_template_string(
-                "<h1>Ваш email успешно подтверждён!</h1>"
-            )
+            return render_template_string("<h1>Your email has been successfully confirmed!</h1>")
         except ValueError as e:
-            return render_template_string(
-                f"<h1>Ошибка подтверждения: {str(e)}</h1>"
-            ), 400
+            logger.error(f"Ошибка подтверждения email: {e} (токен: {token})")
+            return render_template_string(f"<h1>Ошибка подтверждения: {str(e)}</h1>"), 400
 
 
 # ----------- /login ----------
