@@ -20,7 +20,7 @@ from ..extensions import db
 from ..models.network_gas import NetworkGas
 from ..models.package import Package
 from ..models.purchase import Purchase, PurchaseStatus
-from ..models.transactions import Transaction, TxStatus, TxType
+from ..models.transactions import Transaction
 from ..models.user import User
 from ..services import wallet_service as wsvc
 from ..utils import kafka_producer as kfk
@@ -68,6 +68,41 @@ def list_packages() -> List[Dict[str, Any]]:
                 "price_usdt": str(p.price_usdt),
                 "description": p.package_description,  # данные из PackageInfo
                 # Свойства пакета, если они есть
+                "term_months": prop.term_months if prop else None,
+                "interest_rate_from": str(prop.interest_rate_from)
+                if prop
+                else None,
+                "interest_rate_to": str(prop.interest_rate_to)
+                if prop
+                else None,
+                "bonuses": prop.bonuses if prop else None,
+                "target_audience": prop.target_audience if prop else None,
+            },
+        )
+    return result
+
+
+def list_packages_no_price() -> List[Dict[str, Any]]:
+    """
+    Получает список всех пакетов без поля цены.
+
+    Используется для анонимных пользователей (без токена).
+    """
+    packages: List[Package] = Package.query.options(
+        joinedload(Package.package_info),
+        joinedload(Package.package_property),
+    ).all()
+
+    result: List[Dict[str, Any]] = []
+    for p in packages:
+        prop = p.package_property
+        result.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "type": p.type,
+                "price_usdt": None,  # или просто не включать ключ
+                "description": p.package_description,
                 "term_months": prop.term_months if prop else None,
                 "interest_rate_from": str(prop.interest_rate_from)
                 if prop
