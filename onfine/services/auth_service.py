@@ -90,10 +90,9 @@ class AuthService:
         token = EmailConfirmationToken.create(
             user.id,
             purpose="confirm_email",
-            ttl_minutes=60*24,
+            ttl_minutes=60 * 24,
         )
         db.session.commit()
-
 
         confirm_link = f"https://example.com/confirm-email?token={token.token}"
 
