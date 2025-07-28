@@ -1,7 +1,11 @@
 from typing import Any, Dict, List
 
 from flask import request
-from flask_jwt_extended import get_jwt_identity, jwt_required
+from flask_jwt_extended import (
+    get_jwt_identity,
+    jwt_required,
+    verify_jwt_in_request,
+)
 from flask_restx import Namespace, Resource, fields
 
 from onfine.models.user import User
@@ -101,10 +105,23 @@ class PackageList(Resource):
         """
         Получает список доступных пакетов.
 
-        Returns:
-            dict: Словарь с ключом "items", содержащий список пакетов.
+        Если передан валидный JWT токен — возвращает пакеты со стоимостью.
+        Если токен отсутствует или недействителен — возвращает пакеты без стоимости.
         """
-        packages = svc.list_packages()
+        try:
+            # Попытка проверить токен без обязательного требования
+            verify_jwt_in_request(optional=True)
+            user_id = get_jwt_identity()
+            if user_id is not None:
+                # Есть валидный токен — возвращаем полные данные
+                packages = svc.list_packages()
+            else:
+                # Токена нет, возвращаем без цены
+                packages = svc.list_packages_no_price()
+        except Exception:
+            # Ошибка валидации токена — считаем, что токена нет
+            packages = svc.list_packages_no_price()
+
         return {"items": packages}
 
 
