@@ -14,7 +14,7 @@ Email Consumer Service
 Переменные окружения, используемые в конфигурации:
 - KAFKA_BOOTSTRAP: адрес Kafka bootstrap сервера (по умолчанию "kafka:9092")
 - EMAIL_TOPIC: входящий Kafka топик для email сообщений (по умолчанию "email_topic")
-- MAILER_EMAILS_TOPIC: исходящий Kafka топик для статусов email (по умолчанию "mailer_emails")
+- ERROR_TOPIC: исходящий Kafka топик для статусов email (по умолчанию "error_emails")
 - KAFKA_GROUP_ID: группа консьюмера Kafka (по умолчанию "email_consumer_group")
 - DATABASE_URL: строка подключения к базе данных PostgreSQL
 
@@ -47,7 +47,7 @@ logger = logging.getLogger("email_consumer")
 
 KAFKA_BOOTSTRAP: str = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC_IN: str = os.getenv("EMAIL_TOPIC", "email_topic")
-KAFKA_TOPIC_OUT: str = os.getenv("MAILER_EMAILS_TOPIC", "mailer_emails")
+KAFKA_TOPIC_OUT: str = os.getenv("ERROR_TOPIC", "error_emails")
 KAFKA_GROUP_ID: str = os.getenv("KAFKA_GROUP_ID", "email_consumer_group")
 DATABASE_URL: str = os.getenv(
     "DATABASE_URL", "postgresql://user:password@db/dbname"
@@ -106,10 +106,10 @@ def process_message(
             По умолчанию None.
 
     При публикации в Kafka отправляется сообщение с полями:
-        - status: статус обработки ("sent" или "error")
+        - status: статус обработки ("error" — только при ошибках)
         - to: адрес получателя
         - template_type: тип шаблона письма
-        - context: контекст письма (если есть)
+        - при необходимости, можно добавить context (контекст письма) в result_message
         - sent_at: время публикации статуса в ISO формате
         - error: текст ошибки (если есть)
     """
@@ -154,25 +154,28 @@ def process_message(
             else:
                 raise
 
-        result_message: Dict[str, Any] = {
-            "status": status,
-            "to": data["to"],
-            "template_type": data["template_type"],
-            "sent_at": datetime.now(timezone.utc).isoformat(),
-        }
-        if error_message:
-            result_message["error"] = error_message
-        sent_message_id: Optional[str] = send(
-            KAFKA_TOPIC_OUT, result_message, message_id=message_id
-        )
-        if sent_message_id is None:
-            logger.error(
-                f"Failed to send message_id={message_id} to Kafka topic {KAFKA_TOPIC_OUT}"
+        # Отправляем в Kafka только если статус "error"
+        if status == "error":
+            result_message: Dict[str, Any] = {
+                "status": status,
+                "to": data["to"],
+                "template_type": data["template_type"],
+                "sent_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if error_message:
+                result_message["error"] = error_message
+
+            sent_message_id: Optional[str] = send(
+                KAFKA_TOPIC_OUT, result_message, message_id=message_id
             )
-        else:
-            logger.info(
-                f"Опубликовано в {KAFKA_TOPIC_OUT}: message_id={sent_message_id}"
-            )
+            if sent_message_id is None:
+                logger.error(
+                    f"Failed to send message_id={message_id} to Kafka topic {KAFKA_TOPIC_OUT}"
+                )
+            else:
+                logger.info(
+                    f"Опубликовано в {KAFKA_TOPIC_OUT}: message_id={sent_message_id}"
+                )
     except Exception:
         session.rollback()
         logger.error("Ошибка обработки сообщения", exc_info=True)
@@ -185,13 +188,19 @@ def main() -> None:
     """
     Основная функция запуска Kafka-консьюмера.
 
+    Логика обработки сообщений:
     - Подключается к Kafka и слушает входящий топик.
-    - Для каждого сообщения:
-        - Валидирует формат.
-        - Обрабатывает валидные сообщения.
-        - При ошибках обработки публикует в исходящий топик сообщение со статусом "error" и текстом ошибки.
-        - Управляет offset-ами вручную для надежной обработки.
-    - Обрабатывает исключения и корректно завершает работу по сигналу прерывания.
+    - Для каждого полученного сообщения сразу коммитит offset (message.offset + 1),
+      чтобы избежать повторного чтения этого сообщения.
+    - Валидирует сообщение.
+      - Если сообщение невалидно, логирует ошибку и пропускает.
+    - Если валидно, пытается обработать:
+      - При успешной обработке сохраняет лог и публикует статус "sent".
+      - При ошибке обработки публикует статус "error" с текстом ошибки.
+    - Ошибки при публикации статуса "error" логируются, но не вызывают повторной обработки.
+    - Цикл обработки не прерывается при ошибках отдельных сообщений.
+    - Обработка offset-ов вручную обеспечивает at-least-once семантику с минимальной задержкой.
+    - При завершении работы корректно закрывает консьюмер и сбрасывает буферы.
 
     Returns:
         None
@@ -217,19 +226,20 @@ def main() -> None:
                     data = message.value
                     logger.info(f"Получено сообщение: {data}")
 
+                    # Немедленно коммитим offset, чтобы не читать сообщение повторно
+                    consumer.commit(
+                        offsets={
+                            TopicPartition(
+                                message.topic, message.partition
+                            ): OffsetAndMetadata(
+                                message.offset + 1, leader_epoch=-1
+                            )
+                        }
+                    )
+
                     if not validate_message(data):
                         logger.error(f"Невалидное сообщение: {data}")
-                        consumer.commit(
-                            offsets={
-                                TopicPartition(
-                                    message.topic, message.partition
-                                ): OffsetAndMetadata(
-                                    message.offset + 1,
-                                    leader_epoch=-1,
-                                    metadata=None,
-                                )
-                            }
-                        )
+                        # Пропускаем сообщение, offset уже сдвинут
                         continue
 
                     try:
@@ -240,7 +250,7 @@ def main() -> None:
                             exc_info=True,
                         )
                         try:
-                            # Публикуем ошибку в тот же топик с статусом error
+                            # Публикуем статус "error" с описанием проблемы
                             process_message(
                                 data, status="error", error_message=str(e)
                             )
@@ -249,23 +259,14 @@ def main() -> None:
                                 f"Ошибка при публикации ошибки: {inner_e}",
                                 exc_info=True,
                             )
+                        # Продолжаем обработку следующих сообщений без повторного чтения
                         continue
 
-                    consumer.commit(
-                        offsets={
-                            TopicPartition(
-                                message.topic, message.partition
-                            ): OffsetAndMetadata(
-                                message.offset + 1,
-                                leader_epoch=-1,
-                                metadata=None,
-                            )
-                        }
-                    )
                 logger.debug(
                     "Таймаут ожидания сообщений, продолжаю слушать..."
                 )
             except StopIteration:
+                # Исключение StopIteration может возникать при consumer_timeout_ms
                 continue
 
     except KeyboardInterrupt:
