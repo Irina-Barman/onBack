@@ -63,6 +63,7 @@ def generate_html(template_type: str, context: dict) -> str:
 
     Raises:
         jinja2.TemplateNotFound: если шаблон с указанным именем не найден.
+        jinja2.TemplateError: при ошибках в шаблоне или рендеринге.
     """
     try:
         template = env.get_template(f"{template_type}.html")
@@ -107,27 +108,7 @@ def send_email_by_template(to: str, template_type: str, context: dict) -> None:
             f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}"
         )
         return
-    try:
-        html = generate_html(template_type, context)
-    except Exception as e:
-        logger.error(
-            f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}"
-        )
-        return
 
-    msg = {
-        "to": to,
-        "subject": subject,
-        "html": html,
-        "template": template_type,
-        "context": context,
-    }
-
-    success = send(KAFKA_TOPIC, msg, retries=3, backoff=2.0)
-    if success:
-        logger.info(f"Email message published to Kafka topic '{KAFKA_TOPIC}'")
-    else:
-        logger.error(f"Ошибка отправки сообщения в Kafka для {to}")
     msg = {
         "to": to,
         "subject": subject,
