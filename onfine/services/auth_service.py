@@ -41,7 +41,6 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from dotenv import load_dotenv
 from flask_jwt_extended import create_access_token
 
 from onfine.services.email_service import EmailService
@@ -49,9 +48,6 @@ from onfine.services.email_service import EmailService
 from ..extensions import db
 from ..models.email_confirmation_token import EmailConfirmationToken
 from ..models.user import User
-from ..utils.mailer import send_email
-
-load_dotenv()
 
 
 class AuthService:
