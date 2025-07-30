@@ -38,6 +38,13 @@ class EmailLog(db.Model):
         default=lambda: str(uuid.uuid4()),
         index=True,  # Уникальный UUID записи (строка формата UUID)
     )
+    message_id = db.Column(
+        db.String(100),
+        unique=True,
+        nullable=False,
+        index=True,
+        comment="Уникальный идентификатор сообщения из Kafka",
+    )
 
     user_uid = db.Column(
         db.String(36),
