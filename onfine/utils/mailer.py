@@ -30,8 +30,6 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from onfine.utils.kafka_producer import _get_producer, send
 
-from onfine.utils.kafka_producer import _get_producer, send
-
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,10 +42,8 @@ env = Environment(
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("EMAIL_TOPIC", "email_topic")
-KAFKA_TOPIC = os.getenv("EMAIL_TOPIC", "email_topic")
 
 try:
-    producer = _get_producer()
     producer = _get_producer()
 except Exception as e:
     logger.error(f"Ошибка инициализации Kafka Producer: {e}")
@@ -67,7 +63,6 @@ def generate_html(template_type: str, context: dict) -> str:
 
     Raises:
         jinja2.TemplateNotFound: если шаблон с указанным именем не найден.
-        jinja2.TemplateError: при ошибках в шаблоне или рендеринге.
     """
     try:
         template = env.get_template(f"{template_type}.html")
@@ -147,6 +142,5 @@ def send_email_by_template(to: str, template_type: str, context: dict) -> None:
     else:
         logger.error(f"Ошибка отправки сообщения в Kafka для {to}")
 
-    # Логируем письмо (имитация отправки)
     # Логируем письмо (имитация отправки)
     send_email(to, subject, html)
