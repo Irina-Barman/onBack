@@ -30,6 +30,8 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from onfine.utils.kafka_producer import _get_producer, send
 
+from onfine.utils.kafka_producer import _get_producer, send
+
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -42,8 +44,10 @@ env = Environment(
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC = os.getenv("EMAIL_TOPIC", "email_topic")
+KAFKA_TOPIC = os.getenv("EMAIL_TOPIC", "email_topic")
 
 try:
+    producer = _get_producer()
     producer = _get_producer()
 except Exception as e:
     logger.error(f"Ошибка инициализации Kafka Producer: {e}")
@@ -108,6 +112,13 @@ def send_email_by_template(to: str, template_type: str, context: dict) -> None:
             f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}"
         )
         return
+    try:
+        html = generate_html(template_type, context)
+    except Exception as e:
+        logger.error(
+            f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}"
+        )
+        return
 
     msg = {
         "to": to,
@@ -122,6 +133,20 @@ def send_email_by_template(to: str, template_type: str, context: dict) -> None:
         logger.info(f"Email message published to Kafka topic '{KAFKA_TOPIC}'")
     else:
         logger.error(f"Ошибка отправки сообщения в Kafka для {to}")
+    msg = {
+        "to": to,
+        "subject": subject,
+        "html": html,
+        "template": template_type,
+        "context": context,
+    }
 
+    success = send(KAFKA_TOPIC, msg, retries=3, backoff=2.0)
+    if success:
+        logger.info(f"Email message published to Kafka topic '{KAFKA_TOPIC}'")
+    else:
+        logger.error(f"Ошибка отправки сообщения в Kafka для {to}")
+
+    # Логируем письмо (имитация отправки)
     # Логируем письмо (имитация отправки)
     send_email(to, subject, html)

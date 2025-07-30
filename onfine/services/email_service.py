@@ -40,11 +40,14 @@
 import logging
 import uuid
 from datetime import datetime, timezone
+import uuid
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from sqlalchemy.orm import Session
 
 from onfine.models.email_log import EmailLog
+from onfine.utils.kafka_producer import send
 from onfine.utils.kafka_producer import send
 
 logger = logging.getLogger(__name__)
@@ -60,10 +63,13 @@ class EmailService:
     """
 
     def __init__(self, db_session: Session) -> None:
+    def __init__(self, db_session: Session) -> None:
         """
+        Инициализация сервиса сессией базы данных.
         Инициализация сервиса сессией базы данных.
 
         Args:
+            db_session (Session): активная сессия SQLAlchemy для работы с БД.
             db_session (Session): активная сессия SQLAlchemy для работы с БД.
         """
         self.db_session = db_session
@@ -76,8 +82,16 @@ class EmailService:
 
         Формирует сообщение с адресатом, типом шаблона и контекстом,
         отправляет в Kafka-топик 'email_topic' с максимальным числом повторов.
+        Отправляет email-сообщение в Kafka с повторными попытками.
+
+        Формирует сообщение с адресатом, типом шаблона и контекстом,
+        отправляет в Kafka-топик 'email_topic' с максимальным числом повторов.
 
         Args:
+            to (str): адрес электронной почты получателя.
+            template_type (str): идентификатор шаблона письма.
+            context (dict): словарь с дополнительными данными для шаблона,
+                должен содержать хотя бы 'user_uid' и 'subject' для логирования.
             to (str): адрес электронной почты получателя.
             template_type (str): идентификатор шаблона письма.
             context (dict): словарь с дополнительными данными для шаблона,
@@ -127,8 +141,15 @@ class EmailService:
         success: bool,
         error_message: Optional[str] = None,
         message_id: Optional[str] = None,
+        message_id: Optional[str] = None,
     ) -> None:
         """
+        Сохраняет информацию о попытке отправки email в базу данных.
+
+        Если message_id не передан, генерируется новый UUID.
+        Записывает данные в таблицу email_logs с полями:
+        user_uid, email_to, subject, body (пустое), sent_at (текущее время UTC),
+        success, error_message, message_id.
         Сохраняет информацию о попытке отправки email в базу данных.
 
         Если message_id не передан, генерируется новый UUID.
@@ -145,7 +166,18 @@ class EmailService:
             error_message (Optional[str]): текст ошибки, если отправка не удалась.
             message_id (Optional[str]): уникальный идентификатор сообщения,
                 связывает запись в БД и сообщение Kafka.
+            to (str): адрес электронной почты получателя.
+            context (dict): контекст с данными письма, ожидается наличие ключей:
+                'user_uid' (str) - уникальный идентификатор пользователя,
+                'subject' (str) - тема письма.
+            success (bool): статус успешности отправки.
+            error_message (Optional[str]): текст ошибки, если отправка не удалась.
+            message_id (Optional[str]): уникальный идентификатор сообщения,
+                связывает запись в БД и сообщение Kafka.
         """
+        if not message_id:
+            message_id = str(uuid.uuid4())
+
         if not message_id:
             message_id = str(uuid.uuid4())
 
@@ -155,8 +187,10 @@ class EmailService:
             subject=context.get("subject", ""),
             body="",
             sent_at=datetime.now(timezone.utc),
+            sent_at=datetime.now(timezone.utc),
             success=success,
             error_message=error_message,
+            message_id=message_id,
             message_id=message_id,
         )
         self.db_session.add(email_log)
@@ -168,12 +202,21 @@ class EmailService:
 
         Отправляет сообщение методом send_email_with_retry, затем сохраняет результат
         в базу через log_email. Логирует успешную отправку или ошибки отправки и логирования.
+        Выполняет отправку email с повторными попытками и логирование результата.
+
+        Отправляет сообщение методом send_email_with_retry, затем сохраняет результат
+        в базу через log_email. Логирует успешную отправку или ошибки отправки и логирования.
 
         Args:
             to (str): адрес электронной почты получателя.
             template_type (str): тип шаблона письма.
             context (dict): контекст с данными письма.
+            to (str): адрес электронной почты получателя.
+            template_type (str): тип шаблона письма.
+            context (dict): контекст с данными письма.
 
+        Возвращаемое значение:
+            None
         Возвращаемое значение:
             None
         """
@@ -181,14 +224,17 @@ class EmailService:
         success = result.get("status") == "success"
         error_message = result.get("error_message") if not success else None
         message_id = result.get("message_id")
+        message_id = result.get("message_id")
 
         try:
+            self.log_email(to, context, success, error_message, message_id)
             self.log_email(to, context, success, error_message, message_id)
             if success:
                 logger.info(
                     f"Письмо успешно отправлено и сохранено в лог для {to}"
                 )
             else:
+                logger.error(f"Письмо не отправлено для {to}: {error_message}")
                 logger.error(f"Письмо не отправлено для {to}: {error_message}")
         except Exception as e:
             logger.error(f"Ошибка логирования письма для {to}: {e}")
