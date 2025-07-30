@@ -191,4 +191,4 @@ class EmailService:
             else:
                 logger.error(f"Письмо не отправлено для {to}: {error_message}")
         except Exception as e:
-            logger.error(f"Ошибка логирования письма для {to}: {e}")
+            logger.error(f"Ошибка логирования письма для {to}: {e}", exc_info=True)
