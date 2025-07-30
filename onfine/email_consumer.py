@@ -158,7 +158,6 @@ def process_message(
             "status": status,
             "to": data["to"],
             "template_type": data["template_type"],
-            "context": data.get("context", {}),
             "sent_at": datetime.now(timezone.utc).isoformat(),
         }
         if error_message:
