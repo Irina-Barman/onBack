@@ -8,7 +8,7 @@ Email Consumer Service
 Основные компоненты:
 - Валидация входящих сообщений
 - Обработка сообщений с сохранением логов в БД (PostgreSQL)
-- Публикация результатов обработки в Kafka
+- Публикация результатов обработки в Kafka с указанием статуса (успешно/ошибка)
 - Управление offset-ами вручную для обеспечения at-least-once обработки
 
 Переменные окружения, используемые в конфигурации:
@@ -26,9 +26,6 @@ Email Consumer Service
 
 Логирование:
 - Используется логгер с именем "email_consumer" для вывода информации и ошибок.
-
-Пример запуска:
-    python email_consumer.py
 
 """
 
@@ -88,16 +85,33 @@ def validate_message(data: Any) -> bool:
     return True
 
 
-def process_message(data: Dict[str, Any]) -> None:
+def process_message(
+    data: Dict[str, Any],
+    status: str = "sent",
+    error_message: Optional[str] = None,
+) -> None:
     """
-    Обрабатывает валидное сообщение: сохраняет лог в базе и публикует статус в Kafka.
+    Обрабатывает сообщение: сохраняет лог в базе и публикует статус в Kafka.
 
     Если message_id отсутствует, генерируется SHA256-хеш по ключевым полям.
     Проверяется наличие записи с таким message_id в базе, чтобы избежать дубликатов.
     В случае конфликтов уникальности — ошибка логируется и обработка продолжается.
 
-    Args:
+    Параметры:
         data (Dict[str, Any]): Валидированное сообщение с данными email.
+        status (str): Статус обработки сообщения.
+            Возможные значения: "sent" (успешно), "error" (ошибка).
+            По умолчанию "sent".
+        error_message (Optional[str]): Текст ошибки при статусе "error".
+            По умолчанию None.
+
+    При публикации в Kafka отправляется сообщение с полями:
+        - status: статус обработки ("sent" или "error")
+        - to: адрес получателя
+        - template_type: тип шаблона письма
+        - context: контекст письма (если есть)
+        - sent_at: время публикации статуса в ISO формате
+        - error: текст ошибки (если есть)
     """
     session: Session = SessionLocal()
     try:
@@ -124,8 +138,8 @@ def process_message(data: Dict[str, Any]) -> None:
             subject=data.get("context", {}).get("subject", ""),
             body=None,
             sent_at=datetime.now(timezone.utc),
-            success=True,
-            error_message=None,
+            success=(status == "sent"),
+            error_message=error_message,
         )
         session.add(email_log)
         try:
@@ -141,12 +155,14 @@ def process_message(data: Dict[str, Any]) -> None:
                 raise
 
         result_message: Dict[str, Any] = {
+            "status": status,
             "to": data["to"],
             "template_type": data["template_type"],
             "context": data.get("context", {}),
-            "status": "sent",
             "sent_at": datetime.now(timezone.utc).isoformat(),
         }
+        if error_message:
+            result_message["error"] = error_message
         sent_message_id: Optional[str] = send(
             KAFKA_TOPIC_OUT, result_message, message_id=message_id
         )
@@ -174,6 +190,7 @@ def main() -> None:
     - Для каждого сообщения:
         - Валидирует формат.
         - Обрабатывает валидные сообщения.
+        - При ошибках обработки публикует в исходящий топик сообщение со статусом "error" и текстом ошибки.
         - Управляет offset-ами вручную для надежной обработки.
     - Обрабатывает исключения и корректно завершает работу по сигналу прерывания.
 
@@ -223,6 +240,16 @@ def main() -> None:
                             f"Ошибка при обработке сообщения: {e}",
                             exc_info=True,
                         )
+                        try:
+                            # Публикуем ошибку в тот же топик с статусом error
+                            process_message(
+                                data, status="error", error_message=str(e)
+                            )
+                        except Exception as inner_e:
+                            logger.error(
+                                f"Ошибка при публикации ошибки: {inner_e}",
+                                exc_info=True,
+                            )
                         continue
 
                     consumer.commit(
