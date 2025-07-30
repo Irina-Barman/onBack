@@ -1,31 +1,34 @@
 """
-Модуль email_sender — генерация email-сообщений из шаблонов и публикация их в Kafka.
+Модуль для генерации HTML-писем из шаблонов Jinja2 и отправки сообщений в Kafka.
 
-Функционал:
-- Загружает HTML-шаблоны писем из директории с шаблонами (email_templates).
-- Генерирует HTML по заданному типу шаблона и контексту.
-- Публикует сформированное письмо в Kafka-топик для последующей обработки и отправки.
-- Логирует содержание письма (вместо реальной отправки).
-- Обрабатывает ошибки при работе с шаблонами и Kafka.
+Функции:
+- generate_html(template_type: str, context: dict) -> str
+    Генерирует HTML-контент письма на основе шаблона и данных.
 
-Переменные окружения (с значениями по умолчанию):
-- KAFKA_BOOTSTRAP: адрес Kafka bootstrap-сервера (default: "localhost:9092")
-- KAFKA_TOPIC: имя Kafka-топика для публикации сообщений (default: "mailer_emails")
+- send_email(to: str, subject: str, body: str) -> None
+    Логирует письмо (имитация отправки email).
 
-Зависимости:
-- jinja2 — для шаблонизации email-сообщений
-- kafka-python — для публикации сообщений в Kafka
-- logging — для логирования событий и ошибок
-- pathlib, os — для работы с путями и переменными окружения
+- send_email_by_template(to: str, template_type: str, context: dict) -> None
+    Генерирует письмо по шаблону и публикует сообщение в Kafka с повторными попытками.
+
+Переменные окружения:
+- KAFKA_BOOTSTRAP: адрес Kafka bootstrap-сервера (по умолчанию "kafka:9092").
+- EMAIL_TOPIC: имя Kafka-топика для публикации сообщений (по умолчанию "email_topic").
+
+Используемые библиотеки:
+- jinja2 для шаблонизации писем.
+- onfine.utils.kafka_producer для получения Kafka producer и отправки сообщений.
+
+Логирование:
+- Ошибки и информация о процессе генерации и отправки логируются через стандартный logging.
 """
-
-import json
 import logging
 import os
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from kafka import KafkaProducer
+
+from onfine.utils.kafka_producer import _get_producer, send
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +41,10 @@ env = Environment(
 )
 
 KAFKA_BOOTSTRAP = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
-KAFKA_TOPIC = os.getenv("MAILER_TOPIC", "mailer_emails")
+KAFKA_TOPIC = os.getenv("EMAIL_TOPIC", "email_topic")
 
 try:
-    producer = KafkaProducer(
-        bootstrap_servers=KAFKA_BOOTSTRAP,
-        value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-    )
+    producer = _get_producer()
 except Exception as e:
     logger.error(f"Ошибка инициализации Kafka Producer: {e}")
     producer = None
@@ -89,42 +89,39 @@ def send_email(to: str, subject: str, body: str) -> None:
 
 def send_email_by_template(to: str, template_type: str, context: dict) -> None:
     """
-    Формирует письмо по шаблону, публикует его в Kafka и логирует.
+    Генерирует письмо по шаблону и публикует сообщение в Kafka.
 
     Args:
         to (str): Email получателя.
-        template_type (str): Имя шаблона письма.
-        context (dict): Контекст для шаблона, может содержать ключ 'subject' с темой письма.
+        template_type (str): Имя шаблона для генерации письма.
+        context (dict): Данные для подстановки в шаблон, включая ключ "subject" для темы.
 
-    Логика:
-    - Генерирует HTML с помощью generate_html.
-    - Формирует сообщение с полями: to, subject, html, template, context.
-    - Отправляет сообщение в Kafka-топик.
-    - Логирует письмо через send_email.
-    - При ошибках логирует исключения.
-
-    Используется для интеграции с системой отправки писем через Kafka.
+    Повторяет попытки отправки в Kafka с параметрами retries=3, backoff=2.0.
+    Логирует успешную публикацию или ошибку.
+    Также вызывает send_email для имитации отправки письма.
     """
     subject = context.get("subject", "Ваше письмо")
-    html = generate_html(template_type, context)
+    try:
+        html = generate_html(template_type, context)
+    except Exception as e:
+        logger.error(
+            f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}"
+        )
+        return
 
-    # Публикуем сообщение в Kafka
-    if producer:
-        try:
-            msg = {
-                "to": to,
-                "subject": subject,
-                "html": html,
-                "template": template_type,
-                "context": context,
-            }
-            producer.send(KAFKA_TOPIC, msg)
-            producer.flush()
-            logger.info(
-                f"Email message published to Kafka topic '{KAFKA_TOPIC}'"
-            )
-        except Exception as e:
-            logger.error(f"Ошибка отправки сообщения в Kafka: {e}")
+    msg = {
+        "to": to,
+        "subject": subject,
+        "html": html,
+        "template": template_type,
+        "context": context,
+    }
 
-    # Логируем письмо
+    success = send(KAFKA_TOPIC, msg, retries=3, backoff=2.0)
+    if success:
+        logger.info(f"Email message published to Kafka topic '{KAFKA_TOPIC}'")
+    else:
+        logger.error(f"Ошибка отправки сообщения в Kafka для {to}")
+
+    # Логируем письмо (имитация отправки)
     send_email(to, subject, html)
