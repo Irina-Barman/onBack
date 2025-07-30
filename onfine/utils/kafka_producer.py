@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from typing import Any, Dict, Optional
 
 from kafka import KafkaProducer
@@ -43,7 +44,9 @@ def _get_producer(retries: int = 3) -> Optional[KafkaProducer]:
                 logger.info(f"Connected to Kafka at {bootstrap}")
                 return _producer
         except KafkaError as e:
-            logger.error(f"Attempt {attempt + 1}: Kafka connection failed: {e}")
+            logger.error(
+                f"Attempt {attempt + 1}: Kafka connection failed: {e}"
+            )
             if attempt < retries - 1:
                 time.sleep(2)
 
@@ -56,40 +59,46 @@ def send(
     data: Dict[str, Any],
     retries: int = 3,
     backoff: float = 1.0,
-) -> bool:
+    message_id: Optional[str] = None,
+) -> Optional[str]:
     """
     Отправляет сообщение в Kafka топик.
 
-    Args:
-        topic: Название топика.
-        data: Данные для отправки (словарь).
-        retries: Количество попыток при ошибке.
-        backoff: Задержка между попытками (сек).
-
-    Returns:
-        bool: Успешно ли отправлено.
+    Возвращает message_id если успешно, иначе None.
     """
+
     producer = _get_producer()
     if not producer:
-        logger.error(f"Producer unavailable. Dropping message to {topic}: {data}")
-        return False
+        logger.error(
+            f"Producer unavailable. Dropping message to {topic}: {data}"
+        )
+        return None
+
+    if not message_id:
+        message_id = str(uuid.uuid4())
+    data_with_id = data.copy()
+    data_with_id["message_id"] = message_id
 
     for attempt in range(retries):
         try:
-            future = producer.send(topic, data)
-            future.get(timeout=10.0)  # Блокируемся до подтверждения
-            logger.debug(f"Message sent to {topic}: {data}")
-            return True
+            future = producer.send(topic, data_with_id)
+            future.get(timeout=10.0)
+            logger.debug(f"Message sent to {topic}: {data_with_id}")
+            return message_id
         except KafkaTimeoutError as e:
-            logger.warning(f"Timeout sending to {topic} (attempt {attempt + 1}): {e}")
+            logger.warning(
+                f"Timeout sending to {topic} (attempt {attempt + 1}): {e}"
+            )
         except KafkaError as e:
-            logger.error(f"Failed to send to {topic} (attempt {attempt + 1}): {e}")
+            logger.error(
+                f"Failed to send to {topic} (attempt {attempt + 1}): {e}"
+            )
 
         if attempt < retries - 1:
             time.sleep(backoff)
 
-    logger.error(f"Message dropped after {retries} retries: {data}")
-    return False
+    logger.error(f"Message dropped after {retries} retries: {data_with_id}")
+    return None
 
 
 def flush() -> None:

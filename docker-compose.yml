@@ -74,7 +74,7 @@ services:
     env_file: .env
     environment:
       KAFKA_BOOTSTRAP: kafka:9092
-      KAFKA_TOPIC: email_topic
+      MAILER_EMAILS_TOPIC: mailer_emails 
       KAFKA_GROUP_ID: email_consumer_group
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db/${POSTGRES_DB}
     depends_on:
