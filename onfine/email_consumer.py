@@ -232,7 +232,9 @@ def main() -> None:
                             TopicPartition(
                                 message.topic, message.partition
                             ): OffsetAndMetadata(
-                                message.offset + 1, leader_epoch=-1
+                                message.offset + 1,
+                                leader_epoch=-1,
+                                metadata=None,
                             )
                         }
                     )
