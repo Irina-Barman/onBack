@@ -22,6 +22,7 @@ class EmailLog(db.Model):
         sent_at (DateTime): Время отправки письма (UTC).
         success (Boolean): Флаг успешной отправки (True — успешно).
         error_message (Text): Сообщение об ошибке, если отправка не удалась.
+        message_id (str): Уникальный идентификатор сообщения из Kafka.
     """
 
     __tablename__ = "email_logs"
