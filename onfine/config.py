@@ -14,7 +14,3 @@ class Config:
 
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv("JWT_ACCESS_TOKEN_EXPIRES", "3600"))
-
-    # SendGrid
-    SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY", "")
-    SENDGRID_FROM_EMAIL = os.getenv("SENDGRID_FROM_EMAIL", "your_email@example.com")
