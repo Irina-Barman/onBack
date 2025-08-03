@@ -56,3 +56,5 @@ if __name__ == "__main__":
     app = create_app()
     with app.app_context():
         create_packages()
+
+# PYTHONPATH=/app python3 onfine/scripts/update_blockchain_tokens.py

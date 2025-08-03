@@ -35,9 +35,7 @@ def token_required(
     """
 
     @wraps(f)
-    def decorated_function(
-        *args: Any, **kwargs: Any
-    ) -> Tuple[Dict[str, Any], int]:
+    def decorated_function(*args: Any, **kwargs: Any) -> Tuple[Dict[str, Any], int]:
         auth_header = request.headers.get("Authorization", "")
         token = None
         if auth_header.startswith("Bearer "):
@@ -87,6 +85,4 @@ class UserResource(Resource):
         except ValueError as e:
             return {"error": str(e)}, 400
         except Exception as e:
-            return {
-                "error": f"An error occurred while fetching user data.\n{e}"
-            }, 500
+            return {"error": f"An error occurred while fetching user data.\n{e}"}, 500

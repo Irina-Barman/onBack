@@ -1,3 +1,4 @@
+from .blockchain_tokens import BlockchainTokens
 from .equipment_investment import EquipmentInvestment
 from .funding_round import FundingRound, RoundState
 from .ledger_entry import LedgerEntry, LedgerType
@@ -40,4 +41,5 @@ __all__ = [
     "TransferFee",
     "User",
     "Wallet",
+    "BlockchainTokens",
 ]

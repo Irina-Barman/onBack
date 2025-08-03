@@ -15,23 +15,15 @@ _round = ns.model(
     "Round",
     {
         "id": fields.Integer(required=True, description="ID фанд-раунда"),
-        "cap_usdt": fields.String(
-            required=True, description="Кап фанд-раунда в USDT"
-        ),
-        "collected_usdt": fields.String(
-            required=True, description="Собранная сумма в USDT"
-        ),
+        "cap_usdt": fields.String(required=True, description="Кап фанд-раунда в USDT"),
+        "collected_usdt": fields.String(required=True, description="Собранная сумма в USDT"),
         "state": fields.String(required=True, description="Статус раунда"),
     },
 )
 
 _inv = ns.model(
     "InvestIn",
-    {
-        "amount": fields.String(
-            required=True, description="Сумма инвестиций в USDT"
-        )
-    },
+    {"amount": fields.String(required=True, description="Сумма инвестиций в USDT")},
 )
 
 
