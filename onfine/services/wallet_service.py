@@ -1,3 +1,85 @@
+"""
+Сервис управления криптовалютными кошельками, балансами и транзакциями пользователей.
+
+Основные функции:
+- Создание и перечисление кошельков пользователя в поддерживаемых сетях (ERC20, BEP20, TRC20).
+- Управление списком отслеживаемых пользователем токенов.
+- Получение балансов токенов с использованием multicall, если поддерживается сетью.
+- Получение баланса конкретного токена пользователя.
+- Получение таблицы комиссий за переводы.
+- Получение и вычисление псевдо-балансов пользователя на основе истории транзакций.
+- Операции списания (debit), вывода средств (withdraw_funds) с проверкой 2FA и баланса.
+- Управление реферальными балансами: начисление, списание, получение баланса.
+- Начисление средств пользователю и на баланс по сети с созданием транзакций и журналов.
+
+Функции:
+
+- create_wallets(user: User, networks: List[str]) -> Dict[str, str]
+    Создаёт кошельки пользователя для указанных сетей, если их ещё нет, и возвращает словарь адресов.
+
+- list_wallets(user: User) -> Optional[Dict[str, str]]
+    Возвращает адреса всех кошельков пользователя или None, если кошельков нет.
+
+- get_all_active_blockchain_tokens(network: str) -> List[BlockchainTokens]
+    Получает список всех активных токенов для заданной сети.
+
+- get_tracked_blockchain_tokens(user: User, network: str) -> List[BlockchainTokens]
+    Получает список токенов, которые пользователь отслеживает в указанной сети.
+
+- add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockchainToken
+    Добавляет токен в список отслеживаемых пользователем.
+
+- remove_tracked_token(user: User, blockchain_token_id: int) -> bool
+    Удаляет токен из списка отслеживаемых пользователем.
+
+- get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]
+    Получает балансы всех отслеживаемых токенов пользователя в сети, используя multicall при поддержке.
+
+- get_blockchain_token_balance(user_address: str, token_contract_address: str, network: str) -> Decimal
+    Получает баланс конкретного токена пользователя по адресу.
+
+- transfer_fee_table() -> Dict[str, Decimal]
+    Загружает таблицу комиссий за перевод из базы данных.
+
+- get_balance(user: User, network: str, token_symbol: Optional[str] = None) -> Decimal
+    Получает баланс пользователя для нативного токена или указанного токена.
+
+- user_balance_stub(user: User) -> Dict[str, Decimal]
+    Вычисляет псевдо-баланс пользователя на основе подтверждённых транзакций.
+
+- history(user: User) -> List[Transaction]
+    Возвращает историю транзакций пользователя, отсортированную по дате.
+
+- balance_for(user: User, network: str) -> Decimal
+    Возвращает псевдо-баланс пользователя по указанной сети.
+
+- debit(user: User, network: str, amount: Decimal) -> Transaction
+    Списывает средства пользователя (покупка), создавая транзакцию.
+
+- withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_code: str) -> Transaction
+    Выполняет вывод средств с проверкой 2FA и баланса, создаёт транзакцию вывода.
+
+- ref_balance(user: User) -> Decimal
+    Возвращает текущий баланс реферальных средств пользователя.
+
+- ref_credit(user_id: int, amount: Decimal) -> None
+    Начисляет реферальные средства пользователю.
+
+- ref_debit(user: User, amount: Decimal) -> Transaction
+    Списывает реферальные средства пользователя, создавая транзакцию.
+
+- credit_to_user_balance(user: User, network: str, amount: Decimal) -> Transaction
+    Начисляет средства пользователю (например, прибыль).
+
+- credit_to_network_balance(user_id: int, network: str, amount: Decimal) -> None
+    Начисляет средства на баланс пользователя в указанной сети, создавая транзакцию и запись в журнале.
+
+Исключения:
+- ValueError при ошибках валидации, недостаточном балансе, неверном 2FA-коде или отсутствии кошельков.
+- Exception при ошибках работы с базой данных или провайдерами.
+
+"""
+
 from __future__ import annotations
 
 import logging
@@ -44,60 +126,57 @@ TOKEN_STANDARDS: Dict[str, str] = {
 }
 
 
-def _get_token_class(network: str, is_native_gas: bool = False):  # noqa ARG001 ANN202
+def _get_token_class(network: str) -> type:
     """
-    Возвращает класс провайдера токена/монеты для указанной сети.
+    Возвращает класс провайдера токена для указанной сети.
 
     Args:
-        network (str): Название сети (например, "ethereum", "bsc", "tron").
-        is_native_gas (bool): Если True — возвращает класс для нативного токена газа (ETH, BNB, TRX),
-            иначе — для токенов стандарта (ERC20, BEP20, TRC20).
+        network (str): Название сети (например, "erc20", "bep20", "trc20").
+        is_native_gas (bool): Если True, возвращает класс для нативного токена газа (ETH, BNB, TRX),
+            иначе — для стандартных токенов (ERC20, BEP20, TRC20).
 
     Raises:
         ValueError: Если сеть неизвестна.
 
     Returns:
-        Класс провайдера токена.
+        type: Класс провайдера токена.
     """
     network = network.lower()
-    if network in ("erc20"):
+    if network in ("erc20",):
         return ERC20
-    if network in ("bep20"):
+    if network in ("bep20",):
         return BEP20
-    if network in ("trc20"):
+    if network in ("trc20",):
         return TRC20
     raise ValueError(f"Unknown token network: {network}")
 
 
-def _gen_addr_pk(network: str, is_native_gas: bool = False) -> Tuple[str, str]:
+def _gen_addr_pk(network: str) -> Tuple[str, str]:
     """
     Генерирует пару (адрес, приватный ключ) для заданной сети.
 
     Args:
         network (str): Название сети.
-        is_native_gas (bool): Использовать ли класс для нативного газа.
-
     Returns:
         Tuple[str, str]: Кортеж (адрес, незашифрованный приватный ключ).
-
     """
-    TokenClass = _get_token_class(network, is_native_gas)
+    TokenClass = _get_token_class(network)
     return TokenClass.generate_wallet()
 
 
-def create_wallets(user: User, networks: list) -> Dict[str, str]:  # noqa D417
+def create_wallets(user: User, networks: List[str]) -> Dict[str, str]:
     """
-    Создаёт кошельки пользователя для всех поддерживаемых сетей, если их ещё нет.
+    Создаёт кошельки пользователя для указанных сетей, если их ещё нет.
 
     Args:
         user (User): Экземпляр пользователя.
-        networks
+        networks (List[str]): Список названий сетей.
 
     Raises:
-        Exception: При ошибках создания или сохранения кошельков.
+        Exception: При ошибках создания кошельков или сохранения в БД.
 
     Returns:
-        Dict[str, str]: Словарь {сеть: адрес кошелька}.
+        Dict[str, str]: Словарь с ключами — названия сетей, значениями — адреса кошельков.
     """
     existing = {w.network: w.address for w in user.wallets}
 
@@ -109,7 +188,9 @@ def create_wallets(user: User, networks: list) -> Dict[str, str]:  # noqa D417
                     user_id=user.id,
                     network=net,
                     address=addr,
-                    pk_enc=Wallet.encrypt_pk(pk),  # Шифруем приватный ключ перед сохранением
+                    pk_enc=Wallet.encrypt_pk(
+                        pk
+                    ),  # Шифруем приватный ключ перед сохранением
                 )
                 db.session.add(w)
                 existing[net] = addr
@@ -135,7 +216,8 @@ def list_wallets(user: User) -> Optional[Dict[str, str]]:
         user (User): Экземпляр пользователя.
 
     Returns:
-        Optional[Dict[str, str]]: Словарь {сеть: адрес} или None, если кошельков нет.
+        Optional[Dict[str, str]]: Словарь с ключами — названия сетей, значениями — адреса кошельков,
+            либо None, если кошельков нет.
     """
     wallets = {w.network: w.address for w in user.wallets}
     return wallets or None
@@ -143,7 +225,7 @@ def list_wallets(user: User) -> Optional[Dict[str, str]]:
 
 def get_all_active_blockchain_tokens(network: str) -> List[BlockchainTokens]:
     """
-    Возвращает все активные токены для указанной сети.
+    Получает список всех активных токенов для заданной сети.
 
     Args:
         network (str): Название сети.
@@ -151,12 +233,16 @@ def get_all_active_blockchain_tokens(network: str) -> List[BlockchainTokens]:
     Returns:
         List[BlockchainTokens]: Список активных токенов.
     """
-    return BlockchainTokens.query.filter_by(network=network, is_active=True).all()
+    return BlockchainTokens.query.filter_by(
+        network=network, is_active=True
+    ).all()
 
 
-def get_tracked_blockchain_tokens(user: User, network: str) -> List[BlockchainTokens]:
+def get_tracked_blockchain_tokens(
+    user: User, network: str
+) -> List[BlockchainTokens]:
     """
-    Возвращает список активных токенов, отслеживаемых пользователем в сети.
+    Получает список активных токенов, отслеживаемых пользователем в указанной сети.
 
     Args:
         user (User): Экземпляр пользователя.
@@ -168,7 +254,8 @@ def get_tracked_blockchain_tokens(user: User, network: str) -> List[BlockchainTo
     return (
         BlockchainTokens.query.join(
             UserTrackedBlockchainToken,
-            BlockchainTokens.id == UserTrackedBlockchainToken.blockchain_token_id,
+            BlockchainTokens.id
+            == UserTrackedBlockchainToken.blockchain_token_id,
         )
         .filter(
             UserTrackedBlockchainToken.user_id == user.id,
@@ -179,16 +266,18 @@ def get_tracked_blockchain_tokens(user: User, network: str) -> List[BlockchainTo
     )
 
 
-def add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockchainToken:
+def add_tracked_token(
+    user: User, blockchain_token_id: int
+) -> UserTrackedBlockchainToken:
     """
     Добавляет токен в список отслеживаемых пользователем.
 
     Args:
         user (User): Экземпляр пользователя.
-        blockchain_token_id (int): ID токена в блокчейн базе.
+        blockchain_token_id (int): ID токена в базе.
 
     Returns:
-        UserTrackedBlockchainToken: Созданная или существующая запись.
+        UserTrackedBlockchainToken: Созданная или существующая запись об отслеживании токена.
     """
     existing = UserTrackedBlockchainToken.query.filter_by(
         user_id=user.id,
@@ -196,7 +285,9 @@ def add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockc
     ).first()
     if existing:
         return existing
-    tracked = UserTrackedBlockchainToken(user_id=user.id, blockchain_token_id=blockchain_token_id)
+    tracked = UserTrackedBlockchainToken(
+        user_id=user.id, blockchain_token_id=blockchain_token_id
+    )
     db.session.add(tracked)
     db.session.commit()
     return tracked
@@ -214,7 +305,7 @@ def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
         bool: True, если удаление прошло успешно, False если токен не найден.
 
     Raises:
-        Exception: При ошибках удаления из БД.
+        Exception: При ошибках удаления из базы данных.
     """
     tracked = UserTrackedBlockchainToken.query.filter_by(
         user_id=user.id,
@@ -234,15 +325,15 @@ def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
 
 def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     """
-    Получает балансы всех отслеживаемых токенов пользователя в сети с помощью multicall.
+    Получает балансы всех отслеживаемых токенов пользователя в сети с использованием multicall, если это поддерживается.
 
     Args:
         user (User): Экземпляр пользователя.
         network (str): Название сети.
 
     Returns:
-        Dict[str, Decimal]: Словарь {символ токена: баланс}, или пустой словарь, если нет кошелька/токенов.
-
+        Dict[str, Decimal]: Словарь с ключами — символы токенов, значениями — балансы.
+            Пустой словарь, если кошелька или токенов нет.
     """
     wallet = Wallet.query.filter_by(user_id=user.id, network=network).first()
     if not wallet:
@@ -258,6 +349,9 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
         calls = []
 
         for token in blockchain_tokens:
+            if token.is_native_gas:
+                # Пропускаем нативный токен газа в multicall
+                continue
             token_address = provider.to_checksum(token.contract_address)
             calls.append(
                 Call(
@@ -279,19 +373,32 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
 
         balances = {}
         for token in blockchain_tokens:
-            balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
-            decimals = results.get(f"{token.symbol}.decimals", 18) or 18
-            balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
+            if token.is_native_gas:
+                # Получаем баланс нативного токена отдельным вызовом
+                balances[token.symbol] = provider.balance_native(
+                    wallet.address
+                )
+            else:
+                balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
+                decimals = results.get(f"{token.symbol}.decimals", 18) or 18
+                balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
         return balances
 
     balances = {}
     for token in blockchain_tokens:
-        instance = ProviderManager.get(network.lower(), contract_addr=token.contract_address)
-        balances[token.symbol] = instance.balance(wallet.address)
+        instance = ProviderManager.get(
+            network.lower(), contract_addr=token.contract_address
+        )
+        if token.is_native_gas:
+            balances[token.symbol] = instance.balance_native(wallet.address)
+        else:
+            balances[token.symbol] = instance.balance(wallet.address)
     return balances
 
 
-def get_blockchain_token_balance(user_address: str, token_contract_address: str, network: str) -> Decimal:
+def get_blockchain_token_balance(
+    user_address: str, token_contract_address: str, network: str
+) -> Decimal:
     """
     Получает баланс конкретного токена пользователя через класс провайдера.
 
@@ -309,31 +416,34 @@ def get_blockchain_token_balance(user_address: str, token_contract_address: str,
 
 def transfer_fee_table() -> Dict[str, Decimal]:
     """
-    Загружает таблицу комиссий за перевод из базы.
+    Загружает таблицу комиссий за перевод из базы данных.
 
     Raises:
-        ValueError: Если для каких-то сетей отсутствуют данные по комиссии.
+        ValueError: Если для каких-то токенов отсутствуют данные по комиссии.
 
     Returns:
-        Dict[str, Decimal]: Словарь {название_сети: комиссия в USDT} (например, {'ethereum': Decimal('1.5')}).
-
+        Dict[str, Decimal]: Словарь с ключами — названия токенов, значениями — комиссии в USDT.
     """
     fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
     missing = [token for token in NATIVE_TOKENS.values() if token not in fees]
     if missing:
         logger.error(f"Отсутствуют комиссии для токенов: {', '.join(missing)}")
-        raise ValueError(f"Missing transfer fees for native tokens: {', '.join(missing)}")
+        raise ValueError(
+            f"Missing transfer fees for native tokens: {', '.join(missing)}"
+        )
     return fees
 
 
-def get_balance(user: User, network: str, token_symbol: str = None) -> Decimal:  # noqa D417
+def get_balance(
+    user: User, network: str, token_symbol: Optional[str] = None
+) -> Decimal:
     """
-    Получает баланс пользователя по сети через класс провайдера.
+    Получает баланс пользователя в указанной сети через класс провайдера.
 
     Args:
         user (User): Экземпляр пользователя.
         network (str): Название сети.
-        token_symbol
+        token_symbol (Optional[str]): Символ токена (если None — баланс нативного токена).
 
     Returns:
         Decimal: Баланс пользователя.
@@ -347,13 +457,13 @@ def get_balance(user: User, network: str, token_symbol: str = None) -> Decimal: 
 
 def user_balance_stub(user: User) -> Dict[str, Decimal]:
     """
-    Возвращает псевдо-баланс пользователя, вычисленный из истории транзакций.
+    Вычисляет псевдо-баланс пользователя на основе истории подтверждённых транзакций.
 
     Args:
         user (User): Экземпляр пользователя.
 
     Returns:
-        Dict[str, Decimal]: Словарь {сеть_баланс: сумма}.
+        Dict[str, Decimal]: Словарь с ключами в формате "{сеть}_balance" и значениями — суммами балансов.
     """
     balances = {f"{net}_balance": Decimal(0) for net in SUPPORTED_NETWORKS}
 
@@ -385,15 +495,19 @@ def user_balance_stub(user: User) -> Dict[str, Decimal]:
 
 def history(user: User) -> List[Transaction]:
     """
-    Возвращает историю транзакций пользователя, отсортированную по дате (новые сверху).
+    Возвращает историю транзакций пользователя, отсортированную по дате от новых к старым.
 
     Args:
         user (User): Экземпляр пользователя.
 
     Returns:
-        List[Transaction]: Список транзакций.
+        List[Transaction]: Список транзакций пользователя.
     """
-    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
+    return (
+        Transaction.query.filter_by(user_id=user.id)
+        .order_by(Transaction.created_at.desc())
+        .all()
+    )
 
 
 def balance_for(user: User, network: str) -> Decimal:
@@ -426,7 +540,7 @@ def debit(user: User, network: str, amount: Decimal) -> Transaction:
         amount (Decimal): Сумма списания.
 
     Returns:
-        Transaction: Созданная транзакция.
+        Transaction: Созданная транзакция списания.
     """
     tx = Transaction(
         user_id=user.id,
@@ -446,9 +560,11 @@ def debit(user: User, network: str, amount: Decimal) -> Transaction:
     network_from_arg="network",
     amount_from_arg="amount",
 )
-def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_code: str) -> Transaction:
+def withdraw_funds(
+    user: User, network: str, amount: Decimal, dest: str, twofa_code: str
+) -> Transaction:
     """
-    Выводит средства пользователя из указанной сети на внешний адрес.
+    Выполняет вывод средств пользователя из указанной сети на внешний адрес.
 
     Args:
         user (User): Экземпляр пользователя.
@@ -458,7 +574,7 @@ def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_c
         twofa_code (str): Код двухфакторной аутентификации.
 
     Raises:
-        ValueError: При неправильной сети, 2FA, недостаточном балансе или отсутствии кошелька.
+        ValueError: При неизвестной сети, неверном 2FA-коде, недостаточном балансе или отсутствии кошелька.
 
     Returns:
         Transaction: Созданная транзакция вывода.
@@ -466,7 +582,7 @@ def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_c
     if network not in SUPPORTED_NETWORKS:
         raise ValueError(f"Unknown network: {network}")
     if twofa_code != "123456":
-        raise ValueError("Invalid 2FA")
+        raise ValueError("Invalid 2FA-code")
 
     native_token = NATIVE_TOKENS.get(network)
     if native_token is None:
@@ -488,7 +604,7 @@ def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_c
 
     pk = Wallet.decrypt_pk(wallet.pk_enc)
 
-    # Используем нативный токен газа для перечисленных сетей
+    # Используем класс нативного токена газа для перевода
     TokenClass = _get_token_class(network, is_native_gas=True)
 
     tx_hash = TokenClass.transfer(pk, dest, amount)
@@ -516,7 +632,7 @@ def ref_balance(user: User) -> Decimal:
         user (User): Экземпляр пользователя.
 
     Returns:
-        Decimal: Баланс реферала, 0 если отсутствует.
+        Decimal: Баланс реферальных средств, 0 если записи нет.
     """
     rb = ReferralBalance.query.get(user.id)
     return Decimal(rb.balance) if rb else Decimal(0)
@@ -549,10 +665,10 @@ def ref_debit(user: User, amount: Decimal) -> Transaction:
         amount (Decimal): Сумма списания.
 
     Raises:
-        ValueError: Если недостаточно средств.
+        ValueError: Если недостаточно средств на реферальном балансе.
 
     Returns:
-        Transaction: Созданная транзакция.
+        Transaction: Созданная транзакция списания.
     """
     rb = ReferralBalance.query.get(user.id)
     if not rb or rb.balance < amount:
@@ -577,7 +693,9 @@ def ref_debit(user: User, amount: Decimal) -> Transaction:
     network_from_arg="network",
     amount_from_arg="amount",
 )
-def credit_to_user_balance(user: User, network: str, amount: Decimal) -> Transaction:
+def credit_to_user_balance(
+    user: User, network: str, amount: Decimal
+) -> Transaction:
     """
     Начисляет средства пользователю (например, прибыль).
 
@@ -587,7 +705,7 @@ def credit_to_user_balance(user: User, network: str, amount: Decimal) -> Transac
         amount (Decimal): Сумма для начисления.
 
     Returns:
-        Transaction: Созданная транзакция.
+        Transaction: Созданная транзакция начисления.
     """
     tx = Transaction(
         user_id=user.id,
@@ -601,9 +719,11 @@ def credit_to_user_balance(user: User, network: str, amount: Decimal) -> Transac
     return tx
 
 
-def credit_to_network_balance(user_id: int, network: str, amount: Decimal) -> None:
+def credit_to_network_balance(
+    user_id: int, network: str, amount: Decimal
+) -> None:
     """
-    Начисляет средства на баланс сети пользователя.
+    Начисляет средства на баланс пользователя в указанной сети.
 
     Args:
         user_id (int): ID пользователя.
