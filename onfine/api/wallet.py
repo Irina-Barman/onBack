@@ -216,17 +216,18 @@ _balance_for_purchase_out = ns.model(
 class WalletCreate(Resource):
     """
     Создание новых кошельков для пользователя или получение существующих.
-
-    POST:
-        - Создаёт кошельки для всех поддерживаемых сетей для текущего пользователя,
-          если их ещё нет.
-        - Возвращает словарь с адресами кошельков по сетям.
     """
 
     @jwt_required()
     @ns.expect(_wallet_create_in)
     @ns.marshal_with(_wallets)
-    def post(self) -> Dict[str, str]:  # noqa D102
+    def post(self) -> Dict[str, str]:
+        """
+        Создаёт кошельки для указанных сетей (или всех, если не указано) для текущего пользователя.
+
+        Returns:
+            Dict[str, str]: Адреса кошельков по сетям.
+        """
         user = User.query.get(get_jwt_identity())
         networks = ns.payload.get("network")
         try:
@@ -234,10 +235,16 @@ class WalletCreate(Resource):
             logger.info(f"Wallet created/found for user {user.id}: {result}")
             return result
         except SQLAlchemyError as e:
-            logger.error(f"DB error creating wallets for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"DB error creating wallets for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise WalletCreationError("Database error occurred.")
         except Exception as e:
-            logger.error(f"Failed to create wallets for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to create wallets for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise WalletCreationError("Failed to create wallets.")
 
 
@@ -245,16 +252,18 @@ class WalletCreate(Resource):
 class WalletGet(Resource):
     """
     Получение адресов кошельков пользователя.
-
-    POST:
-        - Возвращает адреса кошельков по всем поддерживаемым сетям для текущего пользователя.
-        - Если кошельки не найдены, выбрасывает WalletRetrievalError.
     """
 
     @jwt_required()
     @ns.expect(_empty)
     @ns.marshal_with(_wallets, skip_none=True)
-    def post(self) -> Dict[str, Any]:  # noqa D102
+    def post(self) -> Dict[str, Any]:
+        """
+        Возвращает адреса кошельков по всем поддерживаемым сетям для текущего пользователя.
+
+        Returns:
+            Dict[str, Any]: Адреса кошельков.
+        """
         user = User.query.get(get_jwt_identity())
         try:
             res = svc.list_wallets(user)
@@ -263,7 +272,10 @@ class WalletGet(Resource):
             logger.info(f"Wallet addresses retrieved for user {user.id}: {res}")
             return res
         except SQLAlchemyError as e:
-            logger.error(f"DB error retrieving wallets for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"DB error retrieving wallets for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise WalletRetrievalError("Database error occurred.")
         except WalletRetrievalError as e:
             logger.warning(f"{e.message} for user {user.id}")
@@ -277,14 +289,16 @@ class WalletGet(Resource):
 class TransferFee(Resource):
     """
     Получение таблицы комиссий за переводы в разных сетях.
-
-    GET:
-        - Возвращает словарь с комиссиями за перевод в USDT по каждой поддерживаемой сети.
-        - Если комиссии не найдены или произошла ошибка, возвращает соответствующую ошибку.
     """
 
     @ns.marshal_with(_fee)
-    def get(self) -> Dict[str, str]:  # noqa D102
+    def get(self) -> Dict[str, str]:
+        """
+        Возвращает комиссии за перевод в USDT по каждой поддерживаемой сети.
+
+        Returns:
+            Dict[str, str]: Комиссии по сетям.
+        """
         try:
             fees = {k: str(v) for k, v in svc.transfer_fee_table().items() if k in VALID_NETWORKS}
             if not fees:
@@ -304,18 +318,18 @@ class TransferFee(Resource):
 class Withdraw(Resource):
     """
     Запрос на вывод средств с кошелька пользователя.
-
-    POST:
-        - Принимает данные: сеть, сумму, адрес назначения, 2FA код.
-        - Проводит валидацию и инициирует транзакцию вывода.
-        - Возвращает статус и ID транзакции.
-        - В случае ошибок выбрасывает соответствующие исключения.
     """
 
     @jwt_required()
     @ns.expect(_withdraw_in)
     @ns.marshal_with(_withdraw_out, code=201)
-    def post(self) -> Dict[str, Any]:  # D102
+    def post(self) -> Dict[str, Any]:
+        """
+        Инициирует транзакцию вывода средств.
+
+        Returns:
+            Dict[str, Any]: Статус и ID транзакции.
+        """
         user = User.query.get(get_jwt_identity())
         data = ns.payload
         network = data["network"]
@@ -330,17 +344,28 @@ class Withdraw(Resource):
                 twofa_code=data["2fa_code"],
             )
             logger.info(
-                f"Withdraw request from user {user.id}: network={network}, amount={data['amount']}, dest={data['destination']}, tx_id={tx.id}",
+                f"Withdraw request from user {user.id}: "
+                f"network={network}, "
+                f"amount={data['amount']}, "
+                f"dest={data['destination']}, "
+                f"tx_id={tx.id}",
             )
+
             return {"status": tx.status.value, "transaction_id": tx.id}, 201
         except ValueError as e:
             logger.warning(f"Invalid withdraw request from user {user.id}: {e}")
             raise WithdrawError("Invalid request for withdrawal.")
         except SQLAlchemyError as e:
-            logger.error(f"DB error withdrawing funds for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"DB error withdrawing funds for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise WithdrawError("Database error occurred.")
         except Exception as e:
-            logger.error(f"Failed to withdraw funds for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to withdraw funds for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise WithdrawError("Failed to withdraw funds.")
 
 
@@ -348,14 +373,19 @@ class Withdraw(Resource):
 class TokenBalances(Resource):
     """
     Получение балансов отслеживаемых токенов пользователя в указанной сети.
-
-    GET:
-        - Проверяет поддержку сети.
-        - Возвращает словарь балансов токенов с символами и значениями.
     """
 
     @jwt_required()
-    def get(self, network):
+    def get(self, network: str) -> Dict[str, str]:
+        """
+        Возвращает балансы отслеживаемых токенов пользователя в указанной сети.
+
+        Args:
+            network (str): Название сети (erc20, bep20, trc20).
+
+        Returns:
+            Dict[str, str]: Словарь с символами токенов и их балансами в виде строк.
+        """
         if network not in VALID_NETWORKS:
             ns.abort(400, f"Unsupported network '{network}'")
 
@@ -378,16 +408,21 @@ class TokenBalances(Resource):
 class PurchaseBalance(Resource):
     """
     Получение балансов пользователя token_symbol и gas для приобретения пакета
-
-    GET:
-        - Возвращает баланс пользователя по сетям BEP, ERC, TRC, а также нативным токенам ETH, BNB, TRX.
-        - В случае ошибок выбрасывает BalanceError.
     """
 
     @jwt_required()
     @ns.expect(_balance_for_purchase_in)
     @ns.marshal_with(_balance_for_purchase_out)
-    def get(self, network: str) -> Dict[str, str]:
+    def get(self, network: str) -> Dict[str, Any]:
+        """
+        Возвращает баланс пользователя по токену и нативному балансу для оплаты газа.
+
+        Args:
+            network (str): Название сети (erc20, bep20, trc20).
+
+        Returns:
+            Dict[str, Any]: Информация о балансе, достаточности токенов и газа.
+        """
         amount: Decimal | None = None
         user = User.query.get(get_jwt_identity())
         amount_str = request.args.get("amount")
@@ -400,7 +435,9 @@ class PurchaseBalance(Resource):
             except Exception:
                 ns.abort(400, "'amount' должен быть числом.")
         try:
-            balance = svc.get_balance(user=user, network=network, token_symbol=token_symbol)
+            # balance = svc.get_balance(
+            #     user=user, network=network, token_symbol=token_symbol
+            # )
 
             balances = {
                 # "ethereum_balance": str(ethereum_balance),
@@ -410,7 +447,10 @@ class PurchaseBalance(Resource):
             logger.info(f"Balances retrieved for user {user.id}: {balances}")
             return balances
         except SQLAlchemyError as e:
-            logger.error(f"DB error getting balance for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"DB error getting balance for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise BalanceError("Database error occurred.")
         except Exception as e:
             logger.error(f"Failed to get balance for user {user.id}: {e}", exc_info=True)
@@ -492,22 +532,31 @@ class PurchaseBalance(Resource):
 class Transactions(Resource):
     """
     Получение истории транзакций пользователя.
-
-    GET:
-        - Возвращает список транзакций пользователя с типом, суммой, сетью, статусом и временем.
-        - В случае ошибки выбрасывает TransactionError.
     """
 
     @jwt_required()
     @ns.expect(_empty)
     @ns.marshal_list_with(_tx)
-    def get(self) -> List[Dict[str, Any]]:
+    def get(self) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Получить историю транзакций текущего пользователя.
+
+        Returns:
+            dict: Словарь с ключом "transactions", содержащий список транзакций.
+                Каждая транзакция — словарь с полями типа, суммы, сети, статуса и времени.
+
+        Raises:
+            TransactionError: Если не удалось получить историю транзакций.
+        """
         user = User.query.get(get_jwt_identity())
         try:
             txs = svc.history(user)
             return {"transactions": txs}
         except Exception as e:
-            logger.error(f"Error getting transaction history for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Error getting transaction history for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise TransactionError("Failed to get transaction history.")
 
 
@@ -517,14 +566,18 @@ class CheckWallet(Resource):
     Проверка безопасности адреса кошелька.
 
     POST:
-        - Принимает адрес кошелька.
-        - Возвращает статус безопасности (пока заглушка).
         - TODO: реализовать реальную проверку безопасности.
     """
 
     @ns.expect(_check_in)
     @ns.marshal_with(_check_out)
     def post(self) -> Dict[str, str]:
+        """
+        Проверить безопасность адреса кошелька.
+
+        Returns:
+            dict: Статус проверки безопасности (например, {"status": "safe"}).
+        """
         wallet_address = ns.payload.get("wallet_address")
         logger.info(f"Wallet check requested for address: {wallet_address}")
         # TODO: добавить реальную логику проверки безопасности адреса
@@ -535,22 +588,30 @@ class CheckWallet(Resource):
 class RefBal(Resource):
     """
     Получение баланса реферальных начислений пользователя.
-
-    GET:
-        - Возвращает баланс рефералов пользователя.
-        - В случае ошибки выбрасывает ReferralError.
     """
 
     @jwt_required()
     @ns.marshal_with(_ref_bal)
     def get(self) -> Dict[str, str]:
+        """
+        Получить баланс реферальных начислений текущего пользователя.
+
+        Returns:
+            dict: Словарь с ключом "balance" и значением в виде строки.
+
+        Raises:
+            ReferralError: Если не удалось получить баланс.
+        """
         user = User.query.get(get_jwt_identity())
         try:
             balance = svc.ref_balance(user)
             logger.info(f"Referral balance for user {user.id}: {balance}")
             return {"balance": str(balance)}
         except Exception as e:
-            logger.error(f"Error getting referral balance for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Error getting referral balance for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise ReferralError("Failed to get referral balance.")
 
 
@@ -558,17 +619,21 @@ class RefBal(Resource):
 class RefWithdraw(Resource):
     """
     Вывод средств с реферального баланса.
-
-    POST:
-        - Принимает сумму вывода.
-        - Проверяет минимальный порог вывода.
-        - Списывает средства с реферального баланса и зачисляет на основной баланс.
-        - В случае ошибок возвращает соответствующие сообщения.
     """
 
     @jwt_required()
     @ns.expect(_ref_wd)
     def post(self) -> Dict[str, str]:
+        """
+        Вывести средства с реферального баланса текущего пользователя.
+
+        Returns:
+            Dict[str, str]: Статус операции.
+
+        Raises:
+            400: При неверном формате суммы или если сумма ниже минимального порога.
+            ReferralError: При ошибках списания средств.
+        """
         user = User.query.get(get_jwt_identity())
         try:
             amt = Decimal(ns.payload["amount"])
@@ -590,7 +655,10 @@ class RefWithdraw(Resource):
             logger.warning(f"Referral withdraw error for user {user.id}: {e}")
             ns.abort(400, str(e))
         except Exception as e:
-            logger.error(f"Error during referral withdraw for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Error during referral withdraw for user {user.id}: {e}",
+                exc_info=True,
+            )
             raise ReferralError("Failed to withdraw referral funds.")
 
         return {"status": "ok"}
@@ -600,15 +668,24 @@ class RefWithdraw(Resource):
 class BlockchainTokensList(Resource):
     """
     Получение списка всех активных токенов и тех, что отслеживает пользователь в указанной сети.
-
-    GET:
-        - Проверяет поддержку сети.
-        - Возвращает список всех активных токенов и помечает, какие из них отслеживаются текущим пользователем.
     """
 
     @jwt_required()
     @ns.marshal_list_with(blockchain_token_out)
-    def get(self, network):
+    def get(self, network: str) -> List[Dict[str, Any]]:
+        """
+        Получить список токенов в сети с отметкой отслеживаемых пользователем.
+
+        Args:
+            network (str): Название сети.
+
+        Returns:
+            List[Dict[str, Any]]: Список токенов с полями id, symbol, contract_address, tracked.
+
+        Raises:
+            400: Если сеть не поддерживается.
+            404: Если пользователь не найден.
+        """
         if network not in VALID_NETWORKS:
             ns.abort(400, f"Unsupported network '{network}'")
 
@@ -637,15 +714,21 @@ class TokensAdd(Resource):
     """
     Добавление токена в список отслеживаемых пользователем.
 
-    POST:
-        - Принимает ID токена.
-        - Добавляет токен в список отслеживаемых для текущего пользователя.
-        - Возвращает подтверждение с ID добавленного токена.
     """
 
     @jwt_required()
     @ns.expect(add_blockchain_token_in)
-    def post(self):  # noqa D102, ANN201
+    def post(self) -> (Dict[str, Any], int):
+        """
+        Добавить токен в отслеживаемые текущим пользователем.
+
+        Returns:
+            Tuple[Dict[str, Any], int]: Сообщение об успешном добавлении и HTTP статус 201.
+
+        Raises:
+            400: При отсутствии blockchain_token_id или ошибках сервиса.
+            404: Если пользователь не найден.
+        """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
@@ -670,16 +753,33 @@ class TokensAdd(Resource):
 class TokensRemove(Resource):
     """
     Удаление токена из списка отслеживаемых пользователем.
-
-    DELETE:
-        - Принимает ID токена.
-        - Удаляет токен из списка отслеживаемых для текущего пользователя.
-        - Возвращает подтверждение удаления.
     """
 
     @jwt_required()
     @ns.expect(remove_blockchain_token_in)
-    def delete(self):  # noqa ANN201, D102
+    def delete(self) -> tuple[dict, int]:
+        """
+        Удаляет токен из списка отслеживаемых текущим пользователем.
+
+        Метод требует JWT-авторизацию.
+
+        Args:
+            В теле запроса (JSON) должен присутствовать параметр:
+                blockchain_token_id (str): Идентификатор токена в блокчейне.
+
+        Raises:
+            400: Если параметр blockchain_token_id отсутствует в запросе.
+            404: Если пользователь не найден или токен не найден в списке отслеживаемых.
+            500: При ошибках удаления токена.
+
+        Returns:
+            dict: JSON с подтверждением удаления и идентификатором удалённого токена, например:
+                {
+                    "message": "Token removed",
+                    "blockchain_token_id": "<id_токена>"
+                }
+            HTTP статус 200 при успешном удалении.
+        """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:

@@ -14,7 +14,6 @@
   По умолчанию "https://example.com".
 - JWT_ACCESS_TOKEN_EXPIRES (int): время жизни JWT токена в секундах.
 
-Методы:
 - register_user(email: str, password: str, partner_uid: Optional[str]) -> User
     Регистрирует нового пользователя, создаёт токен подтверждения email и отправляет письмо.
 

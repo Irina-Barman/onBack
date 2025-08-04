@@ -39,27 +39,83 @@ class TokenNetwork:
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
+        """
+        Создаёт новый кошелёк.
+
+        Returns:
+            Tuple[str, str]: Кортеж (адрес, приватный ключ).
+        """
         raise NotImplementedError()
 
     @staticmethod
     def supports_multicall() -> bool:
+        """
+        Указывает, поддерживает ли сеть мультивызовы (multicall).
+
+        Returns:
+            bool: True, если поддерживает, иначе False.
+        """
         return False
 
     def balance(self, address: str) -> Decimal:
+        """
+        Получает баланс токена на указанном адресе.
+
+        Args:
+            address (str): Адрес кошелька.
+
+        Returns:
+            Decimal: Баланс токена.
+        """
         raise NotImplementedError()
 
     def transfer(self, pk: str, to_addr: str, amount: Decimal) -> str:
+        """
+        Отправляет токены с приватного ключа на указанный адрес.
+
+        Args:
+            pk (str): Приватный ключ отправителя.
+            to_addr (str): Адрес получателя.
+            amount (Decimal): Количество токенов для перевода.
+
+        Returns:
+            str: Хэш или ID транзакции.
+        """
         raise NotImplementedError()
 
     def estimate_fee(self, pk: str, amount: Decimal, to_addr: str) -> Decimal:
+        """
+        Оценивает комиссию за перевод токенов.
+
+        Args:
+            pk (str): Приватный ключ отправителя.
+            amount (Decimal): Сумма перевода.
+            to_addr (str): Адрес получателя.
+
+        Returns:
+            Decimal: Оценка комиссии.
+        """
         raise NotImplementedError()
 
     def validate_contract(self) -> bool:
+        """
+        Проверяет валидность контракта токена.
+
+        Returns:
+            bool: True, если контракт валиден, иначе False.
+        """
         raise NotImplementedError()
 
 
 class ERC20(TokenNetwork):
-    def __init__(self, contract_addr: Optional[str] = None):
+    def __init__(self, contract_addr: Optional[str] = None) -> None:
+        """
+        Инициализация ERC20 токена.
+
+        Args:
+            contract_addr (Optional[str]): Адрес контракта токена.
+                Если None, используется переменная окружения USDT_ERC_CONTRACT_ADDR.
+        """
         self.network = "ERC20"
         self.w3 = self._w3()
         self.contract_addr = Web3.to_checksum_address(contract_addr or os.getenv("USDT_ERC_CONTRACT_ADDR"))
@@ -69,6 +125,12 @@ class ERC20(TokenNetwork):
 
     @staticmethod
     def _w3() -> Web3:
+        """
+        Создаёт экземпляр Web3 с HTTP провайдером.
+
+        Returns:
+            Web3: Экземпляр Web3.
+        """
         return Web3(Web3.HTTPProvider(os.getenv("ERC_ANKR_HTTP_URL")))
 
     @staticmethod
@@ -85,17 +147,44 @@ class ERC20(TokenNetwork):
 
     @classmethod
     def get_web3(cls) -> Web3:
+        """
+        Получает экземпляр Web3.
+
+        Returns:
+            Web3: Экземпляр Web3.
+        """
         return cls._w3()
 
     @staticmethod
     def to_checksum(addr: str) -> str:
+        """
+        Преобразует адрес в формат checksum.
+
+        Args:
+            addr (str): Адрес в любом формате.
+
+        Returns:
+            str: Адрес в формате checksum.
+        """
         return Web3.to_checksum_address(addr)
 
     @staticmethod
     def supports_multicall() -> bool:
+        """
+        Проверяет поддержку multicall.
+
+        Returns:
+            bool: True, так как ERC20 поддерживает multicall.
+        """
         return True
 
     def _get_decimals(self) -> int:
+        """
+        Получает количество десятичных знаков токена.
+
+        Returns:
+            int: Количество десятичных знаков.
+        """
         try:
             return self.contract.functions.decimals().call()
         except Exception as e:
@@ -118,13 +207,13 @@ class ERC20(TokenNetwork):
 
     def balance_native(self, addr: str) -> Decimal:
         """
-        Получаем баланс нативного токена
+        Получает баланс нативного токена Ethereum (ETH).
 
         Args:
             addr (str): Ethereum-адрес.
 
         Returns:
-            Decimal: Баланс токена с учётом десятичных знаков.
+            Decimal: Баланс ETH.
         """
         addr = Web3.to_checksum_address(addr)
         bal = self.w3.eth.get_balance(addr)
@@ -178,6 +267,12 @@ class ERC20(TokenNetwork):
         return tx_hash.hex()
 
     def validate_contract(self) -> bool:
+        """
+        Проверяет валидность контракта ERC20.
+
+        Returns:
+            bool: True, если контракт существует и валиден.
+        """
         code = self.w3.eth.get_code(self.contract_addr)
         return bool(code and code != b"\x00")
 
@@ -195,7 +290,14 @@ class BEP20(ERC20):
         abi (list): ABI контракта токена (тот же, что и ERC20).
     """
 
-    def __init__(self, contract_addr: Optional[str] = None):
+    def __init__(self, contract_addr: Optional[str] = None) -> None:
+        """
+        Инициализация BEP20 токена.
+
+        Args:
+            contract_addr (Optional[str]): Адрес контракта токена.
+                Если None, используется переменная окружения USDT_BEP_CONTRACT_ADDR.
+        """
         self.network = "BEP20"
         self.w3 = self._w3()
         self.contract_addr = Web3.to_checksum_address(contract_addr or os.getenv("USDT_BEP_CONTRACT_ADDR"))
@@ -205,18 +307,45 @@ class BEP20(ERC20):
 
     @staticmethod
     def _w3() -> Web3:
+        """
+        Создаёт экземпляр Web3 с HTTP провайдером для BSC.
+
+        Returns:
+            Web3: Экземпляр Web3.
+        """
         return Web3(Web3.HTTPProvider(os.getenv("BEP_ANKR_HTTP_URL")))
 
     @classmethod
     def get_web3(cls) -> Web3:
+        """
+        Получает экземпляр Web3 для BSC.
+
+        Returns:
+            Web3: Экземпляр Web3.
+        """
         return cls._w3()
 
     @staticmethod
     def to_checksum(addr: str) -> str:
+        """
+        Преобразует адрес в формат checksum.
+
+        Args:
+            addr (str): Адрес в любом формате.
+
+        Returns:
+            str: Адрес в формате checksum.
+        """
         return Web3.to_checksum_address(addr)
 
     @staticmethod
     def supports_multicall() -> bool:
+        """
+        Проверяет поддержку multicall.
+
+        Returns:
+            bool: True, так как BEP20 поддерживает multicall.
+        """
         return True
 
     @staticmethod
@@ -232,6 +361,12 @@ class BEP20(ERC20):
         return acct.address, acct.key.hex()
 
     def _get_decimals(self) -> int:
+        """
+        Получает количество десятичных знаков токена BEP20.
+
+        Returns:
+            int: Количество десятичных знаков.
+        """
         try:
             return self.contract.functions.decimals().call()
         except Exception as e:
@@ -251,7 +386,14 @@ class TRC20(TokenNetwork):
         contract_addr (str): Адрес контракта TRC20 токена.
     """
 
-    def __init__(self, contract_addr: Optional[str] = None):
+    def __init__(self, contract_addr: Optional[str] = None) -> None:
+        """
+        Инициализация TRC20 токена.
+
+        Args:
+            contract_addr (Optional[str]): Адрес контракта TRC20 токена.
+                Если None, используется переменная окружения USDT_TRC_CONTRACT_ADDR.
+        """
         self.client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
         self.network = "TRC20"
         self.contract_addr = contract_addr or os.getenv("USDT_TRC_CONTRACT_ADDR")
@@ -261,6 +403,12 @@ class TRC20(TokenNetwork):
         self._decimals = self._get_decimals()
 
     def _get_decimals(self) -> int:
+        """
+        Получает количество десятичных знаков токена TRC20.
+
+        Returns:
+            int: Количество десятичных знаков.
+        """
         try:
             return self.contract.functions.decimals()
         except Exception as e:
@@ -270,14 +418,15 @@ class TRC20(TokenNetwork):
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:
         """
-        Создает новый TRON кошелек.
+        Создаёт новый TRON кошелёк.
 
         Returns:
             Tuple[str, str]: Кортеж из двух строк:
                 - base58check адрес кошелька,
-                - приватный ключ в шестнадцатеричном формате.
+                - приватный ключ в hex формате.
         """
-        acc = TRC20.client.generate_address()
+        client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
+        acc = client.generate_address()
         return acc["base58check_address"], acc["private_key"]
 
     def balance_native(self, addr: str) -> Decimal:
@@ -364,6 +513,12 @@ class TRC20(TokenNetwork):
         return result["txid"]
 
     def validate_contract(self) -> bool:
+        """
+        Проверяет валидность контракта TRC20.
+
+        Returns:
+            bool: True, если контракт валиден, иначе False.
+        """
         try:
             _ = self.contract.functions.symbol().call()
             return True
@@ -372,10 +527,29 @@ class TRC20(TokenNetwork):
 
 
 class ProviderManager:
+    """
+    Менеджер провайдеров для токенов разных сетей.
+
+    Кэширует экземпляры провайдеров для повторного использования.
+    """
+
     _cache = {}
 
     @classmethod
-    def get(cls, network: str, contract_addr: Optional[str] = None):
+    def get(cls, network: str, contract_addr: Optional[str] = None) -> TokenNetwork:
+        """
+        Получает экземпляр провайдера для указанной сети и контракта.
+
+        Args:
+            network (str): Название сети ("ERC20", "BEP20", "TRC20").
+            contract_addr (Optional[str]): Адрес контракта токена.
+
+        Raises:
+            ValueError: Если сеть не поддерживается.
+
+        Returns:
+            TokenNetwork: Экземпляр провайдера токена.
+        """
         key = (network, contract_addr)
         if key in cls._cache:
             return cls._cache[key]
