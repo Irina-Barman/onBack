@@ -41,15 +41,13 @@ import os
 from datetime import datetime, timedelta
 from typing import Any, Dict, Optional
 
-from dotenv import load_dotenv
 from flask_jwt_extended import create_access_token
+
+from onfine.services.email_service import EmailService
 
 from ..extensions import db
 from ..models.email_confirmation_token import EmailConfirmationToken
 from ..models.user import User
-from ..utils.mailer import send_email
-
-load_dotenv()
 
 
 class AuthService:
@@ -92,15 +90,21 @@ class AuthService:
         )
         db.session.commit()
 
-        # Формируем ссылку подтверждения и отправляем письмо
-        confirm_link = (
-            f"{AuthService.BASE_URL}/confirm-email?token={token.token}"
-        )
-        send_email(
-            email,
-            "Confirm your email",
-            f"Click the link to confirm your email: {confirm_link}",
-        )
+        confirm_link = f"https://example.com/confirm-email?token={token.token}"
+
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Подтверждение регистрации",
+            "confirm_link": confirm_link,
+            "user_email": user.email,
+        }
+
+        email_service.send_and_log(
+            to=user.email,
+            template_type="registration_confirmation.html",
+            context=context,
 
         return user
 
@@ -132,14 +136,21 @@ class AuthService:
             db.session.commit()
 
         # Отправляем письмо с подтверждением
-        confirm_link = (
-            f"{AuthService.BASE_URL}/confirm-email?token={token.token}"
-        )
-        send_email(
-            email,
-            "Confirm your email",
-            f"Click the link to confirm your email: {confirm_link}",
-        )
+        confirm_link = f"https://example.com/confirm-email?token={token.token}"
+
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Подтверждение регистрации",
+            "confirm_link": confirm_link,
+            "user_email": user.email,
+        }
+
+        email_service.send_and_log(
+            to=user.email,
+            template_type="registration_confirmation.html",
+            context=context,
 
     # ----------------- CONFIRM EMAIL -----------------
     @staticmethod
@@ -180,6 +191,20 @@ class AuthService:
         )
         db.session.commit()
 
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Добро пожаловать!",
+            "user_email": user.email,
+            # можно добавить user_name и другие данные
+        }
+        email_service.send_and_log(
+            to=user.email,
+            template_type="welcome_after_confirmation.html",
+            context=context,
+        )
+
     # ----------------- LOGIN -----------------
     @staticmethod
     def login_user(email: str, password: str) -> Dict[str, Any]:
@@ -217,7 +242,10 @@ class AuthService:
             (
                 datetime.utcnow() + timedelta(seconds=expires_in_seconds)
             ).timestamp()
-        )
+        )  # noqa: DTZ003
+
+        if not email or not password:
+            raise ValueError("Email and password are required.")
 
         return {
             "accessToken": access_token,
@@ -250,10 +278,20 @@ class AuthService:
         db.session.commit()
 
         reset_link = f"{AuthService.BASE_URL}/reset?token={token.token}"
-        send_email(
-            email,
-            "Password reset",
-            f"Click the link to reset your password: {reset_link}",
+
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Сброс пароля",
+            "reset_link": reset_link,
+            "user_email": user.email,
+        }
+
+        email_service.send_and_log(
+            to=user.email,
+            template_type="password_reset.html.html",  # или подходящий шаблон
+            context=context,
         )
 
     # ----------------- RESET PASSWORD -----------------
@@ -296,5 +334,20 @@ class AuthService:
             token.user_id, token.purpose
         )
         db.session.commit()
+
+        email_service = EmailService(db.session)
+
+        context = {
+            "user_uid": user.uid,
+            "subject": "Пароль успешно сброшен",
+            "user_email": user.email,
+            # при необходимости можно добавить дату и время сброса
+        }
+
+        email_service.send_and_log(
+            to=user.email,
+            template_type="password_reset.html",
+            context=context,
+        )
 
         return {"message": "Password changed successfully."}
