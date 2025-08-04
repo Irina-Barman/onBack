@@ -11,6 +11,7 @@ from onfine.blockchain.providers import (
     BEP20,
     ERC20,
     TRC20,
+    ProviderManager,
 )
 from onfine.extensions import db
 from onfine.models.blockchain_tokens import BlockchainTokens
@@ -251,38 +252,42 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     if not blockchain_tokens:
         return {}
 
-    TokenClass = _get_token_class(network)
-    w3 = TokenClass.get_web3()
+    provider = ProviderManager.get(network.lower())
+    if provider.supports_multicall():
+        w3 = provider.get_web3()
+        calls = []
 
-    calls = []
-    for token in blockchain_tokens:
-        token_address = TokenClass.to_checksum(token.contract_address)
-        # Запрос баланса токена для адреса пользователя
-        calls.append(
-            Call(
-                token_address,
-                ["balanceOf(address)(uint256)", wallet.address],
-                [[f"{token.symbol}.balance", None]],
-            ),
-        )
-        # Запрос количества десятичных знаков токена
-        calls.append(
-            Call(
-                token_address,
-                ["decimals()(uint8)"],
-                [[f"{token.symbol}.decimals", None]],
-            ),
-        )
+        for token in blockchain_tokens:
+            token_address = provider.to_checksum(token.contract_address)
+            calls.append(
+                Call(
+                    token_address,
+                    ["balanceOf(address)(uint256)", wallet.address],
+                    [[f"{token.symbol}.balance", None]],
+                ),
+            )
+            calls.append(
+                Call(
+                    token_address,
+                    ["decimals()(uint8)"],
+                    [[f"{token.symbol}.decimals", None]],
+                ),
+            )
 
-    multi = Multicall(calls, _w3=w3)
-    results = multi()
+        multi = Multicall(calls, _w3=w3)
+        results = multi()
+
+        balances = {}
+        for token in blockchain_tokens:
+            balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
+            decimals = results.get(f"{token.symbol}.decimals", 18) or 18
+            balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
+        return balances
 
     balances = {}
     for token in blockchain_tokens:
-        balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
-        decimals = results.get(f"{token.symbol}.decimals", 18) or 18
-        balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
-
+        instance = ProviderManager.get(network.lower(), contract_addr=token.contract_address)
+        balances[token.symbol] = instance.balance(wallet.address)
     return balances
 
 

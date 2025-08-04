@@ -53,9 +53,7 @@ class EmailConfirmationToken(db.Model):
         nullable=False,
         default=lambda: uuid.uuid4().hex,
     )
-    purpose = db.Column(
-        db.String(32), nullable=False
-    )  # Возможные значения: 'confirm_email', 'reset_pwd'
+    purpose = db.Column(db.String(32), nullable=False)  # Возможные значения: 'confirm_email', 'reset_pwd'
     expires_at = db.Column(db.DateTime, nullable=False)
     used = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -66,7 +64,7 @@ class EmailConfirmationToken(db.Model):
 
         :return: True, если токен активен, иначе False.
         """
-        return (not self.used) and (self.expires_at > datetime.utcnow())
+        return (not self.used) and (self.expires_at > datetime.utcnow())  # noqa DTZ003
 
     @staticmethod
     def deactivate_expired_and_used_tokens(user_id: int, purpose: str) -> None:
@@ -76,7 +74,7 @@ class EmailConfirmationToken(db.Model):
         :param user_id: Идентификатор пользователя.
         :param purpose: Назначение токена.
         """
-        now = datetime.utcnow()
+        now = datetime.utcnow()  # noqa DTZ003
         (
             EmailConfirmationToken.query.filter(
                 EmailConfirmationToken.user_id == user_id,
@@ -89,17 +87,13 @@ class EmailConfirmationToken(db.Model):
                     ),
                 ),
             )
-            .filter(
-                EmailConfirmationToken.used.is_(False)
-            )  # Обновляем только неиспользованные
+            .filter(EmailConfirmationToken.used.is_(False))  # Обновляем только неиспользованные
             .update({"used": True}, synchronize_session="fetch")
         )
         db.session.flush()
 
     @staticmethod
-    def get_active_token(
-        user_id: int, purpose: str
-    ) -> "EmailConfirmationToken":
+    def get_active_token(user_id: int, purpose: str) -> "EmailConfirmationToken":
         """
         Получает первый доступный активный токен для пользователя и цели.
 
@@ -111,7 +105,7 @@ class EmailConfirmationToken(db.Model):
         :param purpose: Назначение токена.
         :return: Объект EmailConfirmationToken или None, если активных токенов нет.
         """
-        now = datetime.utcnow()
+        now = datetime.utcnow()  # noqa DTZ003
         return (
             EmailConfirmationToken.query.filter_by(
                 user_id=user_id,
@@ -123,9 +117,7 @@ class EmailConfirmationToken(db.Model):
         )
 
     @staticmethod
-    def create(
-        user_id: int, purpose: str, ttl_minutes: int
-    ) -> "EmailConfirmationToken":
+    def create(user_id: int, purpose: str, ttl_minutes: int) -> "EmailConfirmationToken":
         """
         Создает новый токен с указанным временем жизни или возвращает существующий активный.
 
@@ -141,14 +133,10 @@ class EmailConfirmationToken(db.Model):
         :return: Объект EmailConfirmationToken.
         """
         # Помечаем устаревшие и использованные токены
-        EmailConfirmationToken.deactivate_expired_and_used_tokens(
-            user_id, purpose
-        )
+        EmailConfirmationToken.deactivate_expired_and_used_tokens(user_id, purpose)
 
         # Проверяем наличие активного токена
-        existing_token = EmailConfirmationToken.get_active_token(
-            user_id, purpose
-        )
+        existing_token = EmailConfirmationToken.get_active_token(user_id, purpose)
         if existing_token:
             return existing_token
 
@@ -156,7 +144,7 @@ class EmailConfirmationToken(db.Model):
         new_token = EmailConfirmationToken(
             user_id=user_id,
             purpose=purpose,
-            expires_at=datetime.utcnow() + timedelta(minutes=ttl_minutes),
+            expires_at=datetime.utcnow() + timedelta(minutes=ttl_minutes),  # noqa DTZ003
         )
         db.session.add(new_token)
         db.session.flush()  # Получаем id и token до коммита

@@ -41,6 +41,10 @@ class TokenNetwork:
     def generate_wallet() -> Tuple[str, str]:
         raise NotImplementedError()
 
+    @staticmethod
+    def supports_multicall() -> bool:
+        return False
+
     def balance(self, address: str) -> Decimal:
         raise NotImplementedError()
 
@@ -78,6 +82,18 @@ class ERC20(TokenNetwork):
         w3 = ERC20._w3()
         acct = w3.eth.account.create()
         return acct.address, acct.key.hex()
+
+    @classmethod
+    def get_web3(cls) -> Web3:
+        return cls._w3()
+
+    @staticmethod
+    def to_checksum(addr: str) -> str:
+        return Web3.to_checksum_address(addr)
+
+    @staticmethod
+    def supports_multicall() -> bool:
+        return True
 
     def _get_decimals(self) -> int:
         try:
@@ -190,6 +206,18 @@ class BEP20(ERC20):
     @staticmethod
     def _w3() -> Web3:
         return Web3(Web3.HTTPProvider(os.getenv("BEP_ANKR_HTTP_URL")))
+
+    @classmethod
+    def get_web3(cls) -> Web3:
+        return cls._w3()
+
+    @staticmethod
+    def to_checksum(addr: str) -> str:
+        return Web3.to_checksum_address(addr)
+
+    @staticmethod
+    def supports_multicall() -> bool:
+        return True
 
     @staticmethod
     def generate_wallet() -> Tuple[str, str]:

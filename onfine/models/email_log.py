@@ -87,12 +87,10 @@ class EmailLog(db.Model):
     # Связь с моделью User по полю user_uid
     user = db.relationship(
         "User",
-        backref=db.backref(
-            "email_logs", lazy=True
-        ),  #  Связь с пользователем, которому отправлено письмо
+        backref=db.backref("email_logs", lazy=True),  #  Связь с пользователем, которому отправлено письмо
     )
 
-    def __repr__(self):
+    def __repr__(self):  # noqa ANN204
         """
         Возвращает строковое представление объекта EmailLog,
         удобное для отладки и логирования.

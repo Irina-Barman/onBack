@@ -49,9 +49,7 @@ KAFKA_BOOTSTRAP: str = os.getenv("KAFKA_BOOTSTRAP", "kafka:9092")
 KAFKA_TOPIC_IN: str = os.getenv("EMAIL_TOPIC", "email_topic")
 KAFKA_TOPIC_OUT: str = os.getenv("ERROR_TOPIC", "error_emails")
 KAFKA_GROUP_ID: str = os.getenv("KAFKA_GROUP_ID", "email_consumer_group")
-DATABASE_URL: str = os.getenv(
-    "DATABASE_URL", "postgresql://user:password@db/dbname"
-)
+DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql://user:password@db/dbname")
 
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
@@ -76,9 +74,7 @@ def validate_message(data: Any) -> bool:
         return False
     if "to" not in data or not isinstance(data["to"], str):
         return False
-    if "template_type" not in data or not isinstance(
-        data["template_type"], str
-    ):
+    if "template_type" not in data or not isinstance(data["template_type"], str):
         return False
     if "context" in data and not isinstance(data["context"], dict):
         return False
@@ -122,13 +118,9 @@ def process_message(
 
         session.expire_all()
 
-        existing: Optional[EmailLog] = (
-            session.query(EmailLog).filter_by(message_id=message_id).first()
-        )
+        existing: Optional[EmailLog] = session.query(EmailLog).filter_by(message_id=message_id).first()
         if existing:
-            logger.info(
-                f"Сообщение с message_id={message_id} уже обработано, пропускаем"
-            )
+            logger.info(f"Сообщение с message_id={message_id} уже обработано, пропускаем")
             return
 
         email_log = EmailLog(
@@ -147,9 +139,7 @@ def process_message(
         except Exception as e:
             session.rollback()
             if "duplicate key value" in str(e):
-                logger.warning(
-                    f"Дубликат message_id={message_id} при вставке — пропускаем"
-                )
+                logger.warning(f"Дубликат message_id={message_id} при вставке — пропускаем")
                 return
             else:
                 raise
@@ -165,17 +155,11 @@ def process_message(
             if error_message:
                 result_message["error"] = error_message
 
-            sent_message_id: Optional[str] = send(
-                KAFKA_TOPIC_OUT, result_message, message_id=message_id
-            )
+            sent_message_id: Optional[str] = send(KAFKA_TOPIC_OUT, result_message, message_id=message_id)
             if sent_message_id is None:
-                logger.error(
-                    f"Failed to send message_id={message_id} to Kafka topic {KAFKA_TOPIC_OUT}"
-                )
+                logger.error(f"Failed to send message_id={message_id} to Kafka topic {KAFKA_TOPIC_OUT}")
             else:
-                logger.info(
-                    f"Опубликовано в {KAFKA_TOPIC_OUT}: message_id={sent_message_id}"
-                )
+                logger.info(f"Опубликовано в {KAFKA_TOPIC_OUT}: message_id={sent_message_id}")
     except Exception:
         session.rollback()
         logger.error("Ошибка обработки сообщения", exc_info=True)
@@ -215,9 +199,7 @@ def main() -> None:
         consumer_timeout_ms=10000,
     )
 
-    logger.info(
-        f"Консьюмер писем запущен, слушает топик '{KAFKA_TOPIC_IN}' на {KAFKA_BOOTSTRAP}"
-    )
+    logger.info(f"Консьюмер писем запущен, слушает топик '{KAFKA_TOPIC_IN}' на {KAFKA_BOOTSTRAP}")
 
     try:
         while True:
@@ -229,14 +211,12 @@ def main() -> None:
                     # Немедленно коммитим offset, чтобы не читать сообщение повторно
                     consumer.commit(
                         offsets={
-                            TopicPartition(
-                                message.topic, message.partition
-                            ): OffsetAndMetadata(
+                            TopicPartition(message.topic, message.partition): OffsetAndMetadata(
                                 message.offset + 1,
                                 leader_epoch=-1,
                                 metadata=None,
-                            )
-                        }
+                            ),
+                        },
                     )
 
                     if not validate_message(data):
@@ -253,9 +233,7 @@ def main() -> None:
                         )
                         try:
                             # Публикуем статус "error" с описанием проблемы
-                            process_message(
-                                data, status="error", error_message=str(e)
-                            )
+                            process_message(data, status="error", error_message=str(e))
                         except Exception as inner_e:
                             logger.error(
                                 f"Ошибка при публикации ошибки: {inner_e}",
@@ -264,9 +242,7 @@ def main() -> None:
                         # Продолжаем обработку следующих сообщений без повторного чтения
                         continue
 
-                logger.debug(
-                    "Таймаут ожидания сообщений, продолжаю слушать..."
-                )
+                logger.debug("Таймаут ожидания сообщений, продолжаю слушать...")
             except StopIteration:
                 # Исключение StopIteration может возникать при consumer_timeout_ms
                 continue

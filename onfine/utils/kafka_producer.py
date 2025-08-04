@@ -44,9 +44,7 @@ def _get_producer(retries: int = 3) -> Optional[KafkaProducer]:
                 logger.info(f"Connected to Kafka at {bootstrap}")
                 return _producer
         except KafkaError as e:
-            logger.error(
-                f"Attempt {attempt + 1}: Kafka connection failed: {e}"
-            )
+            logger.error(f"Attempt {attempt + 1}: Kafka connection failed: {e}")
             if attempt < retries - 1:
                 time.sleep(2)
 
@@ -69,9 +67,7 @@ def send(
 
     producer = _get_producer()
     if not producer:
-        logger.error(
-            f"Producer unavailable. Dropping message to {topic}: {data}"
-        )
+        logger.error(f"Producer unavailable. Dropping message to {topic}: {data}")
         return None
 
     if not message_id:
@@ -86,13 +82,9 @@ def send(
             logger.debug(f"Message sent to {topic}: {data_with_id}")
             return message_id
         except KafkaTimeoutError as e:
-            logger.warning(
-                f"Timeout sending to {topic} (attempt {attempt + 1}): {e}"
-            )
+            logger.warning(f"Timeout sending to {topic} (attempt {attempt + 1}): {e}")
         except KafkaError as e:
-            logger.error(
-                f"Failed to send to {topic} (attempt {attempt + 1}): {e}"
-            )
+            logger.error(f"Failed to send to {topic} (attempt {attempt + 1}): {e}")
 
         if attempt < retries - 1:
             time.sleep(backoff)

@@ -86,7 +86,7 @@ class AuthService:
         token = EmailConfirmationToken.create(
             user.id,
             purpose="confirm_email",
-            ttl_minutes=60*24,
+            ttl_minutes=60 * 24,
         )
         db.session.commit()
 
@@ -101,10 +101,7 @@ class AuthService:
             "user_email": user.email,
         }
 
-        email_service.send_and_log(
-            to=user.email,
-            template_type="registration_confirmation.html",
-            context=context,
+        email_service.send_and_log(to=user.email, template_type="registration_confirmation.html", context=context)
 
         return user
 
@@ -123,9 +120,7 @@ class AuthService:
         if user.email_confirmed:
             raise ValueError("Email already confirmed.")
 
-        token = EmailConfirmationToken.get_active_token(
-            user.id, "confirm_email"
-        )
+        token = EmailConfirmationToken.get_active_token(user.id, "confirm_email")
 
         if not token:
             token = EmailConfirmationToken.create(
@@ -147,10 +142,7 @@ class AuthService:
             "user_email": user.email,
         }
 
-        email_service.send_and_log(
-            to=user.email,
-            template_type="registration_confirmation.html",
-            context=context,
+        email_service.send_and_log(to=user.email, template_type="registration_confirmation.html", context=context)
 
     # ----------------- CONFIRM EMAIL -----------------
     @staticmethod
@@ -172,9 +164,7 @@ class AuthService:
 
         # Проверяем, что токен активен (не использован и не просрочен)
         if not token.is_active():
-            raise ValueError(
-                "Token expired or already used, request a new one"
-            )
+            raise ValueError("Token expired or already used, request a new one")
 
         user = User.query.get(token.user_id)
         if not user:
@@ -186,9 +176,7 @@ class AuthService:
         db.session.flush()  # Фиксируем изменения в сессии перед массовым обновлением
 
         # Массово деактивируем все просроченные и использованные токены для данного пользователя
-        EmailConfirmationToken.deactivate_expired_and_used_tokens(
-            token.user_id, token.purpose
-        )
+        EmailConfirmationToken.deactivate_expired_and_used_tokens(token.user_id, token.purpose)
         db.session.commit()
 
         email_service = EmailService(db.session)
@@ -228,9 +216,7 @@ class AuthService:
 
         expires_in_seconds = os.getenv("JWT_ACCESS_TOKEN_EXPIRES")
         if expires_in_seconds is None:
-            raise ValueError(
-                "JWT_ACCESS_TOKEN_EXPIRES is not set in environment variables."
-            )
+            raise ValueError("JWT_ACCESS_TOKEN_EXPIRES is not set in environment variables.")
         expires_in_seconds = int(expires_in_seconds)
 
         access_token = create_access_token(
@@ -238,11 +224,7 @@ class AuthService:
             expires_delta=timedelta(seconds=expires_in_seconds),
         )
 
-        expire_timestamp = int(
-            (
-                datetime.utcnow() + timedelta(seconds=expires_in_seconds)
-            ).timestamp()
-        )  # noqa: DTZ003
+        expire_timestamp = int((datetime.utcnow() + timedelta(seconds=expires_in_seconds)).timestamp())  # noqa: DTZ003
 
         if not email or not password:
             raise ValueError("Email and password are required.")
@@ -316,9 +298,7 @@ class AuthService:
 
         # Проверяем, что токен активен (не использован и не просрочен)
         if not token.is_active():
-            raise ValueError(
-                "Token expired or already used, request a new one"
-            )
+            raise ValueError("Token expired or already used, request a new one")
 
         user = User.query.get(token.user_id)
         if not user:
@@ -330,9 +310,7 @@ class AuthService:
         db.session.flush()  # Фиксируем изменения перед массовым обновлением
 
         # Массово деактивируем все просроченные и использованные токены для данного пользователя
-        EmailConfirmationToken.deactivate_expired_and_used_tokens(
-            token.user_id, token.purpose
-        )
+        EmailConfirmationToken.deactivate_expired_and_used_tokens(token.user_id, token.purpose)
         db.session.commit()
 
         email_service = EmailService(db.session)

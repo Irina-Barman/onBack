@@ -22,6 +22,7 @@
 Логирование:
 - Ошибки и информация о процессе генерации и отправки логируются через стандартный logging.
 """
+
 import logging
 import os
 from pathlib import Path
@@ -104,9 +105,7 @@ def send_email_by_template(to: str, template_type: str, context: dict) -> None:
     try:
         html = generate_html(template_type, context)
     except Exception as e:
-        logger.error(
-            f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}"
-        )
+        logger.error(f"Не удалось сгенерировать HTML для шаблона '{template_type}': {e}")
         return
 
     msg = {

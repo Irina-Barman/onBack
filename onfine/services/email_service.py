@@ -68,9 +68,7 @@ class EmailService:
         """
         self.db_session = db_session
 
-    def send_email_with_retry(
-        self, to: str, template_type: str, context: dict
-    ) -> Dict[str, Optional[str]]:
+    def send_email_with_retry(self, to: str, template_type: str, context: dict) -> Dict[str, Optional[str]]:
         """
         Отправляет email-сообщение в Kafka с повторными попытками.
 
@@ -90,9 +88,7 @@ class EmailService:
                 - 'message_id': уникальный идентификатор сообщения в Kafka или None
         """
         topic = "email_topic"
-        message_id = str(
-            uuid.uuid4()
-        )  # Генерируем уникальный id для сообщения
+        message_id = str(uuid.uuid4())  # Генерируем уникальный id для сообщения
 
         message = {
             "to": to,
@@ -102,9 +98,7 @@ class EmailService:
             "sent_at": datetime.now(timezone.utc).isoformat(),
         }
 
-        sent_message_id = send(
-            topic, message, retries=MAX_RETRIES, backoff=2.0
-        )
+        sent_message_id = send(topic, message, retries=MAX_RETRIES, backoff=2.0)
         if sent_message_id:
             return {
                 "status": "success",
@@ -185,9 +179,7 @@ class EmailService:
         try:
             self.log_email(to, context, success, error_message, message_id)
             if success:
-                logger.info(
-                    f"Письмо успешно отправлено и сохранено в лог для {to}"
-                )
+                logger.info(f"Письмо успешно отправлено и сохранено в лог для {to}")
             else:
                 logger.error(f"Письмо не отправлено для {to}: {error_message}")
         except Exception as e:
