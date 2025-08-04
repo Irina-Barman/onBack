@@ -43,9 +43,7 @@ _gas = ns.model(
 _buy_in = ns.model(
     "BuyIn",
     {  # тело запроса для покупки
-        "package_id": fields.Integer(
-            required=True, description="ID пакета для покупки"
-        ),
+        "package_id": fields.Integer(required=True, description="ID пакета для покупки"),
         "network": fields.String(
             required=True,
             enum=["bep", "erc", "trc"],
@@ -61,9 +59,7 @@ _buy_out = ns.model(
         "status": fields.String(description="Статус покупки"),
         "summ": fields.String(description="Сумма в USDT"),
         "gas": fields.String(description="Стоимость газа в USDT"),
-        "from_database": fields.Boolean(
-            description="Флаг, указывающий, что покупка взята из базы"
-        ),
+        "from_database": fields.Boolean(description="Флаг, указывающий, что покупка взята из базы"),
     },
 )
 
@@ -81,18 +77,14 @@ _confirm_out = ns.model(
     "ConfirmOut",
     {
         "purchase_id": fields.Integer(description="ID покупки"),
-        "status": fields.String(
-            description="Статус покупки после подтверждения"
-        ),
+        "status": fields.String(description="Статус покупки после подтверждения"),
     },
 )
 
 _package_list_model = ns.model(
     "PackageList",
     {
-        "items": fields.List(
-            fields.Nested(_pkg), description="Список пакетов"
-        ),
+        "items": fields.List(fields.Nested(_pkg), description="Список пакетов"),
     },
 )
 

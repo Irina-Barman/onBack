@@ -88,5 +88,8 @@ exclude = [
 "onfine/scripts/update_package_properties.py" = ["T201"]
 "onfine/scripts/update_package_info.py" = ["T201"]
 "onfine/scripts/update_package.py" = ["T201"]
+"onfine/scripts/update_blockchain_tokens.py" = ["T201"]
+"onfine/blockchain/providers.py" = ["D102", "ANN206", "ANN204"]
+"onfine/api/wallet.py" = ["ANN001", "ANN201", "D102", "F841", "E501"]
 [tool.ruff.lint.pydocstyle]
 convention = "google"

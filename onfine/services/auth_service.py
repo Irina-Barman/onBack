@@ -86,7 +86,7 @@ class AuthService:
         token = EmailConfirmationToken.create(
             user.id,
             purpose="confirm_email",
-            ttl_minutes=60 * 24,
+            ttl_minutes=60*24,
         )
         db.session.commit()
 
@@ -105,7 +105,6 @@ class AuthService:
             to=user.email,
             template_type="registration_confirmation.html",
             context=context,
-        )
 
         return user
 
@@ -152,7 +151,6 @@ class AuthService:
             to=user.email,
             template_type="registration_confirmation.html",
             context=context,
-        )
 
     # ----------------- CONFIRM EMAIL -----------------
     @staticmethod
@@ -295,7 +293,6 @@ class AuthService:
             template_type="password_reset.html.html",  # или подходящий шаблон
             context=context,
         )
-
 
     # ----------------- RESET PASSWORD -----------------
     @staticmethod

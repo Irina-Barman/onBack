@@ -42,4 +42,3 @@ __all__ = [
     "User",
     "Wallet",
     "EmailLog",
-]

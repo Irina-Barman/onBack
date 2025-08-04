@@ -6,6 +6,7 @@ from kafka.errors import KafkaError
 
 kafka_ns = Namespace("kafka", description="Работоспособность кафки")
 
+
 @kafka_ns.route("/info")
 class KafkaHealth(Resource):
     def get(self) -> dict:

@@ -4,6 +4,22 @@ from .api import register_namespaces
 from .config import Config
 from .extensions import db, jwt, migrate
 
+# def is_running_in_docker() -> bool:
+#     """Проверка: запущено ли приложение внутри Docker."""
+#     if os.getenv("DOCKER_ENV") == "1":
+#         return True
+
+#     try:
+#         with open("/proc/1/cgroup", "rt") as f:  # noqa PTH123
+#             return "docker" in f.read() or "kubepods" in f.read()
+#     except FileNotFoundError:
+#         return False
+
+
+# env_file_name = ".env" if is_running_in_docker() else ".env.local"
+# dotenv_path = Path(__file__).resolve().parents[1] / env_file_name
+# load_dotenv(dotenv_path=dotenv_path, override=True)
+
 # authorizations = {
 #     'Bearer': {
 #         'type': 'apiKey',
@@ -29,10 +45,9 @@ def create_app() -> Flask:
 
     register_namespaces(app)
 
-    # Запуск WebSocket-листенеров после инициализации db
-
-    from onfine.services.websocket_listener import start_websocket_listeners
-
-    start_websocket_listeners(app, db.session)
+    # Это запускает сокет на получение данных в рантайме на ноде (но не потянем на бабкам пока что)
+    # # Запуск WebSocket-листенеров после инициализации db
+    # from onfine.services.websocket_listener import start_websocket_listeners
+    # start_websocket_listeners(app, db.session)
 
     return app

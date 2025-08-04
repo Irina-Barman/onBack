@@ -3,9 +3,10 @@ services:
     build: .
     command: gunicorn "onfine.app_factory:create_app()" -b 0.0.0.0:5500 --worker-tmp-dir /dev/shm --workers 4
     env_file: .env
+    environment:
+      - DOCKER_ENV=1
     volumes:
       - .:/app
-      # - ./onfine/private.pem:/app/onfine/private.pem:ro
     depends_on:
       db:
         condition: service_healthy
