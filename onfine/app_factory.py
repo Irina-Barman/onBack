@@ -1,8 +1,12 @@
 from flask import Flask
 
+from logging_config import setup_logging
+
 from .api import register_namespaces
 from .config import Config
 from .extensions import db, jwt, migrate
+
+setup_logging()
 
 # def is_running_in_docker() -> bool:
 #     """Проверка: запущено ли приложение внутри Docker."""

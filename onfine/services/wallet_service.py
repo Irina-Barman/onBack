@@ -126,7 +126,7 @@ TOKEN_STANDARDS: Dict[str, str] = {
 }
 
 
-def _get_token_class(network: str) -> type:
+def _get_token_class(network: str, is_native_gas: bool = False) -> type:  # noqa: ARG001
     """
     Возвращает класс провайдера токена для указанной сети.
 

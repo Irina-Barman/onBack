@@ -64,7 +64,7 @@ _wallet_create_in = ns.model(
         "network": fields.List(
             fields.String(enum=["erc20", "bep20", "trc20"]),
             required=False,
-            description="Список сетей, для которых нужно создать кошельки. Если не указано — создаются все.",
+            description="Список сетей, для которых нужно создать кошельки.",
             example=["erc20", "trc20"],
         ),
     },
@@ -212,7 +212,7 @@ _balance_for_purchase_out = ns.model(
 )
 
 
-@ns.route("/create_wallet")
+@ns.route("/create-wallet")
 class WalletCreate(Resource):
     """
     Создание новых кошельков для пользователя или получение существующих.
@@ -230,6 +230,8 @@ class WalletCreate(Resource):
         """
         user = User.query.get(get_jwt_identity())
         networks = ns.payload.get("network")
+        if networks is None:
+            networks = []  # Пустой список, если networks не было передано
         try:
             result = svc.create_wallets(user=user, networks=networks)
             logger.info(f"Wallet created/found for user {user.id}: {result}")
@@ -248,7 +250,7 @@ class WalletCreate(Resource):
             raise WalletCreationError("Failed to create wallets.")
 
 
-@ns.route("/get_wallet")
+@ns.route("/get-wallet")
 class WalletGet(Resource):
     """
     Получение адресов кошельков пользователя.
@@ -285,7 +287,7 @@ class WalletGet(Resource):
             raise WalletRetrievalError("Failed to get wallets.")
 
 
-@ns.route("/transfer_fee")
+@ns.route("/transfer-fee")
 class TransferFee(Resource):
     """
     Получение таблицы комиссий за переводы в разных сетях.
@@ -402,7 +404,7 @@ class TokenBalances(Resource):
         return {sym: str(balance.quantize(Decimal("1.000000"))) for sym, balance in balances.items()}
 
 
-@ns.route("/balance_for_purchase/<string:network>")
+@ns.route("/balance-for-purchase/<string:network>")
 @ns.param("amount", "Необходимое количество токена для покупки", required=False)
 @ns.param("token_symbol", "Символ токена (дефолтный, USDT)", required=False)
 class PurchaseBalance(Resource):
@@ -560,7 +562,7 @@ class Transactions(Resource):
             raise TransactionError("Failed to get transaction history.")
 
 
-@ns.route("/check_wallet")
+@ns.route("/check-wallet")
 class CheckWallet(Resource):
     """
     Проверка безопасности адреса кошелька.
@@ -584,7 +586,7 @@ class CheckWallet(Resource):
         return {"status": "safe"}
 
 
-@ns.route("/referral_balance")
+@ns.route("/referral-balance")
 class RefBal(Resource):
     """
     Получение баланса реферальных начислений пользователя.
@@ -615,7 +617,7 @@ class RefBal(Resource):
             raise ReferralError("Failed to get referral balance.")
 
 
-@ns.route("/referral_withdraw")
+@ns.route("/referral-withdraw")
 class RefWithdraw(Resource):
     """
     Вывод средств с реферального баланса.
@@ -664,7 +666,7 @@ class RefWithdraw(Resource):
         return {"status": "ok"}
 
 
-@ns.route("/blockchain_tokens/<string:network>")
+@ns.route("/blockchain-tokens/<string:network>")
 class BlockchainTokensList(Resource):
     """
     Получение списка всех активных токенов и тех, что отслеживает пользователь в указанной сети.
