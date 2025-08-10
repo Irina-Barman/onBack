@@ -1,6 +1,7 @@
 import json
 import os
 from datetime import datetime
+from time import sleep
 
 from onfine.app_factory import create_app
 from onfine.extensions import db
@@ -86,7 +87,7 @@ tokens = [
     {
         "network": "TRC20",
         "symbol": "USDT",
-        "contract_address": "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj",
+        "contract_address": "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t",
         "decimals": 6,
     },
     {
@@ -98,7 +99,49 @@ tokens = [
     {
         "network": "TRC20",
         "symbol": "TUSD",
-        "contract_address": "TD6Eddh6FMSYM8PJhCwRW2V5y3KiLZRnPt",
+        "contract_address": "TUpMhErZL2fhh4sVNULAbNKLokS4GjC1F4",
+        "decimals": 18,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "USDD",
+        "contract_address": "TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn",
+        "decimals": 18,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "BTT",
+        "contract_address": "TKfjV9RNKJJCqPvBtK8L7Knykh7DNWvnYt",
+        "decimals": 18,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "WIN",
+        "contract_address": "TDp6vW9DG6YtgWZp7UojzX2hrSR8qffR4m",
+        "decimals": 6,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "JST",
+        "contract_address": "TCFLL5dx5ZJdKnWuesXxi1VPwjLVmWZZy9",
+        "decimals": 18,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "SUN",
+        "contract_address": "TSSMHYeV2uE9qYH95DgK7YyYAgNBbQMqSb",
+        "decimals": 18,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "WBTC",
+        "contract_address": "TXWkP3jLBqRGojUih1ShzNyDaN5Csnebok",
+        "decimals": 8,
+    },
+    {
+        "network": "TRC20",
+        "symbol": "WETH",
+        "contract_address": "TXWkP3jLBqRGojUih1ShzNyDaN5Csnebok",  # в TRON WETH = WBTC контракт (wrapped ETH)
         "decimals": 18,
     },
 ]
@@ -174,6 +217,7 @@ def seed_tokens() -> None:
             with open(abi_path, "w", encoding="utf-8") as f:  # noqa PTH123
                 json.dump(abi, f, indent=2, ensure_ascii=False)
             print(f"ABI сохранён в {abi_path}")
+            sleep(0.5)  # Чтобы не перегружать API запросами
         except Exception as e:
             print(f"Не удалось загрузить ABI для {t['network']}:{t['symbol']} - {e}")
 

@@ -35,7 +35,7 @@ docker compose ps          # все контейнеры Up/healthy
 docker compose logs -f api # Gunicorn запустился без ошибок
 ```
 
-*API доступен на [http://localhost:5000](http://localhost:5000), Swagger-UI — `/api/docs`.*
+*API доступен на [http://localhost:5500](http://localhost:5500), Swagger-UI — `/api/docs`.*
 
 ---
 

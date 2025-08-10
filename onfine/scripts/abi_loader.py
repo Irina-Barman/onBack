@@ -26,8 +26,9 @@ def get_etherscan_abi(address: str) -> list:
         raise Exception("ETHERSCAN_API_KEY не задан")
 
     url = (
-        "https://api.etherscan.io/api"
-        "?module=contract"
+        "https://api.etherscan.io/v2/api"
+        "?chainid=1"
+        "&module=contract"
         "&action=getabi"
         f"&address={address}"
         f"&apikey={ETHERSCAN_API_KEY}"
@@ -57,15 +58,15 @@ def get_bscscan_abi(address: str) -> list:
     Raises:
         Exception: Если API ключ не задан или BSCScan возвращает ошибку.
     """
-    if not BSCSCAN_API_KEY:
+    if not ETHERSCAN_API_KEY:
         raise Exception("BSCSCAN_API_KEY не задан")
-
     url = (
-        "https://api.bscscan.com/api"
-        "?module=contract"
+        "https://api.etherscan.io/v2/api"
+        "?chainid=56"
+        "&module=contract"
         "&action=getabi"
         f"&address={address}"
-        f"&apikey={BSCSCAN_API_KEY}"
+        f"&apikey={ETHERSCAN_API_KEY}"
     )
     resp = requests.get(url)
     resp.raise_for_status()
@@ -79,10 +80,10 @@ def get_bscscan_abi(address: str) -> list:
 
 def get_tronscan_abi(address: str) -> list:
     """
-    Получить ABI TRC20 контракта по адресу с помощью Tronscan API.
+    Получить ABI TRC20 контракта по адресу через TronGrid Full Node API.
 
     Args:
-        address (str): Tron адрес контракта.
+        address (str): Tron адрес контракта в base58 (T...).
 
     Returns:
         list: ABI контракта в формате JSON.
@@ -90,21 +91,22 @@ def get_tronscan_abi(address: str) -> list:
     Raises:
         Exception: Если ABI не найден или произошла ошибка запроса.
     """
-    url = f"https://apilist.tronscan.org/api/contract?contract={address}"
-    headers = {}
-
-    # Если есть TronGrid API ключ, добавляем в заголовки для авторизации
+    url = "https://api.trongrid.io/wallet/getcontract"
+    headers = {"Content-Type": "application/json"}
     if TRONGRID_API_KEY:
         headers["TRON-PRO-API-KEY"] = TRONGRID_API_KEY
 
-    resp = requests.get(url, headers=headers)
+    payload = {"value": address, "visible": True}  # говорим, что адрес в base58
+
+    resp = requests.post(url, headers=headers, json=payload)
     resp.raise_for_status()
     data = resp.json()
 
-    if "abi" not in data or data["abi"] is None:
-        raise Exception(f"Tronscan error: ABI not found for {address}")
+    abi = data.get("abi", {}).get("entrys")
+    if not abi:
+        raise Exception(f"TronGrid error: ABI not found for {address}")
 
-    return data["abi"]
+    return abi
 
 
 def fetch_abi(network: str, address: str) -> list:
