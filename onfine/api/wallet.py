@@ -1,6 +1,5 @@
 import logging
-import os
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 from typing import Any, Dict, List
 
 from flask import request
@@ -13,12 +12,9 @@ from onfine.services import wallet_service as svc
 
 from ..api.error_handlers import (
     BalanceError,
-    ReferralError,
     TransactionError,
-    TransferFeeRetrievalError,
     WalletCreationError,
     WalletRetrievalError,
-    WithdrawError,
     register_error_handlers,
 )
 
@@ -197,17 +193,20 @@ _balance_for_purchase_in = ns.model("BalanceForPurchaseIn", {})
 
 # Модель ответа
 _balance_for_purchase_out = ns.model(
-    "PurchaseBalanceOut",
+    "BalanceForPurchaseOut",
     {
-        "network": fields.String(description="Сеть: erc20, bep20, trc20"),
-        "token": fields.String(description="Символ токена, например USDT"),
-        "token_balance": fields.String(description="Баланс токена пользователя"),
-        "required_token_amount": fields.String(description="Сколько нужно для покупки"),
-        "has_enough_token": fields.Boolean(description="Хватает ли токенов"),
-        "native_balance": fields.String(description="Баланс нативного токена для газа (ETH/BNB/TRX)"),
-        "estimated_gas_fee": fields.String(description="Примерная стоимость газа в нативном токене"),
-        "estimated_gas_fee_usdt": fields.String(description="Примерная стоимость газа в эквиваленте USDT"),
-        "has_enough_gas": fields.Boolean(description="Хватает ли газа на оплату"),
+        "network": fields.String(description="Сеть (erc20, bep20, trc20)"),
+        "package_price_usdt": fields.String(description="Стоимость пакета в USDT"),
+        "usdt_balance": fields.String(description="Баланс USDT пользователя"),
+        "has_enough_usdt": fields.Boolean(description="Хватает ли USDT для пакета"),
+        "native_token": fields.String(description="Нативный токен газа (ETH/BNB/TRX)"),
+        "native_balance": fields.String(description="Баланс нативного токена"),
+        "estimated_gas_fee_native": fields.String(description="Газ в нативном токене"),
+        "estimated_gas_fee_usdt": fields.String(description="Газ в USDT-эквиваленте"),
+        "has_enough_gas": fields.Boolean(description="Хватает ли газа"),
+        "total_required_usdt": fields.String(description="Общая сумма в USDT, если газа нет (пакет + газ)"),
+        "has_enough_total": fields.Boolean(description="Хватает ли средств в целом"),
+        "shortfall_usdt": fields.String(description="Сколько не хватает в USDT (если не хватает)"),
     },
 )
 
@@ -287,106 +286,130 @@ class WalletGet(Resource):
             raise WalletRetrievalError("Failed to get wallets.")
 
 
-@ns.route("/transfer-fee")
-class TransferFee(Resource):
+@ns.route("/check-wallet")
+class CheckWallet(Resource):
     """
-    Получение таблицы комиссий за переводы в разных сетях.
+    Проверка безопасности адреса кошелька.
+
+    POST:
+        - TODO: реализовать реальную проверку безопасности.
     """
 
-    @ns.marshal_with(_fee)
-    def get(self) -> Dict[str, str]:
+    @ns.expect(_check_in)
+    @ns.marshal_with(_check_out)
+    def post(self) -> Dict[str, str]:
         """
-        Возвращает комиссии за перевод в USDT по каждой поддерживаемой сети.
+        Проверить безопасность адреса кошелька.
 
         Returns:
-            Dict[str, str]: Комиссии по сетям.
+            dict: Статус проверки безопасности (например, {"status": "safe"}).
         """
-        try:
-            fees = {k: str(v) for k, v in svc.transfer_fee_table().items() if k in VALID_NETWORKS}
-            if not fees:
-                logger.warning("Transfer fees not found.")
-                return {}, 204
-            logger.info(f"Transfer fees requested: {fees}")
-            return fees
-        except SQLAlchemyError as e:
-            logger.error(f"DB error getting transfer fees: {e}", exc_info=True)
-            raise TransferFeeRetrievalError("Database error occurred.")
-        except Exception as e:
-            logger.error(f"Failed to get transfer fees: {e}", exc_info=True)
-            raise TransferFeeRetrievalError("Failed to get transfer fees.")
+        wallet_address = ns.payload.get("wallet_address")
+        logger.info(f"Wallet check requested for address: {wallet_address}")
+        # TODO: добавить реальную логику проверки безопасности адреса
+        return {"status": "safe"}
 
 
-@ns.route("/withdraw")
-class Withdraw(Resource):
-    """
-    Запрос на вывод средств с кошелька пользователя.
-    """
+# @ns.route("/transfer-fee")
+# class TransferFee(Resource):
+#     """
+#     Получение таблицы комиссий за переводы в разных сетях.
+#     """
 
-    @jwt_required()
-    @ns.expect(_withdraw_in)
-    @ns.marshal_with(_withdraw_out, code=201)
-    def post(self) -> Dict[str, Any]:
-        """
-        Инициирует транзакцию вывода средств.
+#     @ns.marshal_with(_fee)
+#     def get(self) -> Dict[str, str]:
+#         """
+#         Возвращает комиссии за перевод в USDT по каждой поддерживаемой сети.
 
-        Returns:
-            Dict[str, Any]: Статус и ID транзакции.
-        """
-        user = User.query.get(get_jwt_identity())
-        data = ns.payload
-        network = data["network"]
-        if network not in VALID_NETWORKS:
-            ns.abort(400, f"Unsupported network '{network}'")
-        try:
-            tx = svc.withdraw_funds(
-                user=user,
-                network=network,
-                amount=Decimal(data["amount"]),
-                dest=data["destination"],
-                twofa_code=data["2fa_code"],
-            )
-            logger.info(
-                f"Withdraw request from user {user.id}: "
-                f"network={network}, "
-                f"amount={data['amount']}, "
-                f"dest={data['destination']}, "
-                f"tx_id={tx.id}",
-            )
+#         Returns:
+#             Dict[str, str]: Комиссии по сетям.
+#         """
+#         try:
+#             fees = {k: str(v) for k, v in svc.transfer_fee_table().items() if k in VALID_NETWORKS}
+#             if not fees:
+#                 logger.warning("Transfer fees not found.")
+#                 return {}, 204
+#             logger.info(f"Transfer fees requested: {fees}")
+#             return fees
+#         except SQLAlchemyError as e:
+#             logger.error(f"DB error getting transfer fees: {e}", exc_info=True)
+#             raise TransferFeeRetrievalError("Database error occurred.")
+#         except Exception as e:
+#             logger.error(f"Failed to get transfer fees: {e}", exc_info=True)
+#             raise TransferFeeRetrievalError("Failed to get transfer fees.")
 
-            return {"status": tx.status.value, "transaction_id": tx.id}, 201
-        except ValueError as e:
-            logger.warning(f"Invalid withdraw request from user {user.id}: {e}")
-            raise WithdrawError("Invalid request for withdrawal.")
-        except SQLAlchemyError as e:
-            logger.error(
-                f"DB error withdrawing funds for user {user.id}: {e}",
-                exc_info=True,
-            )
-            raise WithdrawError("Database error occurred.")
-        except Exception as e:
-            logger.error(
-                f"Failed to withdraw funds for user {user.id}: {e}",
-                exc_info=True,
-            )
-            raise WithdrawError("Failed to withdraw funds.")
+
+# @ns.route("/withdraw")
+# class Withdraw(Resource):
+#     """
+#     Запрос на вывод средств с кошелька пользователя.
+#     """
+
+#     @jwt_required()
+#     @ns.expect(_withdraw_in)
+#     @ns.marshal_with(_withdraw_out, code=201)
+#     def post(self) -> Dict[str, Any]:
+#         """
+#         Инициирует транзакцию вывода средств.
+
+#         Returns:
+#             Dict[str, Any]: Статус и ID транзакции.
+#         """
+#         user = User.query.get(get_jwt_identity())
+#         data = ns.payload
+#         network = data["network"]
+#         if network not in VALID_NETWORKS:
+#             ns.abort(400, f"Unsupported network '{network}'")
+#         try:
+#             tx = svc.withdraw_funds(
+#                 user=user,
+#                 network=network,
+#                 amount=Decimal(data["amount"]),
+#                 dest=data["destination"],
+#                 twofa_code=data["2fa_code"],
+#             )
+#             logger.info(
+#                 f"Withdraw request from user {user.id}: "
+#                 f"network={network}, "
+#                 f"amount={data['amount']}, "
+#                 f"dest={data['destination']}, "
+#                 f"tx_id={tx.id}",
+#             )
+
+#             return {"status": tx.status.value, "transaction_id": tx.id}, 201
+#         except ValueError as e:
+#             logger.warning(f"Invalid withdraw request from user {user.id}: {e}")
+#             raise WithdrawError("Invalid request for withdrawal.")
+#         except SQLAlchemyError as e:
+#             logger.error(
+#                 f"DB error withdrawing funds for user {user.id}: {e}",
+#                 exc_info=True,
+#             )
+#             raise WithdrawError("Database error occurred.")
+#         except Exception as e:
+#             logger.error(
+#                 f"Failed to withdraw funds for user {user.id}: {e}",
+#                 exc_info=True,
+#             )
+#             raise WithdrawError("Failed to withdraw funds.")
 
 
 @ns.route("/balances/<string:network>")
 class TokenBalances(Resource):
     """
-    Получение балансов отслеживаемых токенов пользователя в указанной сети.
+    Возвращает балансы отслеживаемых токенов пользователя в указанной сети.
+
+    Args:
+        network (str): Название сети (erc20, bep20, trc20).
+
+    Returns:
+        Dict[str, str]: Словарь с символами токенов и их балансами в виде строк.
     """
 
     @jwt_required()
     def get(self, network: str) -> Dict[str, str]:
         """
-        Возвращает балансы отслеживаемых токенов пользователя в указанной сети.
-
-        Args:
-            network (str): Название сети (erc20, bep20, trc20).
-
-        Returns:
-            Dict[str, str]: Словарь с символами токенов и их балансами в виде строк.
+        Получить балансы отслеживаемых токенов пользователя в указанной сети.
         """
         if network not in VALID_NETWORKS:
             ns.abort(400, f"Unsupported network '{network}'")
@@ -401,7 +424,11 @@ class TokenBalances(Resource):
         except Exception as e:
             ns.abort(500, f"Failed to get balances: {e}")
 
-        return {sym: str(balance.quantize(Decimal("1.000000"))) for sym, balance in balances.items()}
+        q = Decimal("0.000001")
+        return {
+            sym: str((bal if isinstance(bal, Decimal) else Decimal(bal)).quantize(q, rounding=ROUND_DOWN))
+            for sym, bal in balances.items()
+        }
 
 
 @ns.route("/balance-for-purchase/<string:network>")
@@ -552,7 +579,7 @@ class Transactions(Resource):
         """
         user = User.query.get(get_jwt_identity())
         try:
-            txs = svc.history(user)
+            txs = svc.history(user)  # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
             return {"transactions": txs}
         except Exception as e:
             logger.error(
@@ -560,246 +587,3 @@ class Transactions(Resource):
                 exc_info=True,
             )
             raise TransactionError("Failed to get transaction history.")
-
-
-@ns.route("/check-wallet")
-class CheckWallet(Resource):
-    """
-    Проверка безопасности адреса кошелька.
-
-    POST:
-        - TODO: реализовать реальную проверку безопасности.
-    """
-
-    @ns.expect(_check_in)
-    @ns.marshal_with(_check_out)
-    def post(self) -> Dict[str, str]:
-        """
-        Проверить безопасность адреса кошелька.
-
-        Returns:
-            dict: Статус проверки безопасности (например, {"status": "safe"}).
-        """
-        wallet_address = ns.payload.get("wallet_address")
-        logger.info(f"Wallet check requested for address: {wallet_address}")
-        # TODO: добавить реальную логику проверки безопасности адреса
-        return {"status": "safe"}
-
-
-@ns.route("/referral-balance")
-class RefBal(Resource):
-    """
-    Получение баланса реферальных начислений пользователя.
-    """
-
-    @jwt_required()
-    @ns.marshal_with(_ref_bal)
-    def get(self) -> Dict[str, str]:
-        """
-        Получить баланс реферальных начислений текущего пользователя.
-
-        Returns:
-            dict: Словарь с ключом "balance" и значением в виде строки.
-
-        Raises:
-            ReferralError: Если не удалось получить баланс.
-        """
-        user = User.query.get(get_jwt_identity())
-        try:
-            balance = svc.ref_balance(user)
-            logger.info(f"Referral balance for user {user.id}: {balance}")
-            return {"balance": str(balance)}
-        except Exception as e:
-            logger.error(
-                f"Error getting referral balance for user {user.id}: {e}",
-                exc_info=True,
-            )
-            raise ReferralError("Failed to get referral balance.")
-
-
-@ns.route("/referral-withdraw")
-class RefWithdraw(Resource):
-    """
-    Вывод средств с реферального баланса.
-    """
-
-    @jwt_required()
-    @ns.expect(_ref_wd)
-    def post(self) -> Dict[str, str]:
-        """
-        Вывести средства с реферального баланса текущего пользователя.
-
-        Returns:
-            Dict[str, str]: Статус операции.
-
-        Raises:
-            400: При неверном формате суммы или если сумма ниже минимального порога.
-            ReferralError: При ошибках списания средств.
-        """
-        user = User.query.get(get_jwt_identity())
-        try:
-            amt = Decimal(ns.payload["amount"])
-        except Exception:
-            logger.warning(f"Invalid referral withdraw amount format from user {user.id}")
-            ns.abort(400, "Invalid amount format")
-
-        min_payout = Decimal(os.getenv("REF_MIN_PAYOUT", "10"))
-        if amt < min_payout:
-            logger.warning(f"Referral withdraw amount below minimum for user {user.id}: {amt} < {min_payout}")
-            ns.abort(400, f"Amount below minimum payout {min_payout}")
-
-        try:
-            svc.ref_debit(user, amt)
-            # При списании с основного баланса используем сеть ethereum, например
-            svc.debit(user, "ethereum", -amt)
-            logger.info(f"Successful referral withdraw for user {user.id}, amount: {amt}")
-        except ValueError as e:
-            logger.warning(f"Referral withdraw error for user {user.id}: {e}")
-            ns.abort(400, str(e))
-        except Exception as e:
-            logger.error(
-                f"Error during referral withdraw for user {user.id}: {e}",
-                exc_info=True,
-            )
-            raise ReferralError("Failed to withdraw referral funds.")
-
-        return {"status": "ok"}
-
-
-@ns.route("/blockchain-tokens/<string:network>")
-class BlockchainTokensList(Resource):
-    """
-    Получение списка всех активных токенов и тех, что отслеживает пользователь в указанной сети.
-    """
-
-    @jwt_required()
-    @ns.marshal_list_with(blockchain_token_out)
-    def get(self, network: str) -> List[Dict[str, Any]]:
-        """
-        Получить список токенов в сети с отметкой отслеживаемых пользователем.
-
-        Args:
-            network (str): Название сети.
-
-        Returns:
-            List[Dict[str, Any]]: Список токенов с полями id, symbol, contract_address, tracked.
-
-        Raises:
-            400: Если сеть не поддерживается.
-            404: Если пользователь не найден.
-        """
-        if network not in VALID_NETWORKS:
-            ns.abort(400, f"Unsupported network '{network}'")
-
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        if not user:
-            ns.abort(404, "User not found")
-
-        all_tokens = svc.get_all_active_blockchain_tokens(network)
-        tracked_tokens = svc.get_tracked_blockchain_tokens(user, network)
-        tracked_ids = {t.id for t in tracked_tokens}
-
-        return [
-            {
-                "id": token.id,
-                "symbol": token.symbol,
-                "contract_address": token.contract_address,
-                "tracked": token.id in tracked_ids,
-            }
-            for token in all_tokens
-        ]
-
-
-@ns.route("/tokens")
-class TokensAdd(Resource):
-    """
-    Добавление токена в список отслеживаемых пользователем.
-
-    """
-
-    @jwt_required()
-    @ns.expect(add_blockchain_token_in)
-    def post(self) -> (Dict[str, Any], int):
-        """
-        Добавить токен в отслеживаемые текущим пользователем.
-
-        Returns:
-            Tuple[Dict[str, Any], int]: Сообщение об успешном добавлении и HTTP статус 201.
-
-        Raises:
-            400: При отсутствии blockchain_token_id или ошибках сервиса.
-            404: Если пользователь не найден.
-        """
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        if not user:
-            ns.abort(404, "User not found")
-
-        blockchain_token_id = ns.payload.get("blockchain_token_id")
-        if not blockchain_token_id:
-            ns.abort(400, "blockchain_token_id required")
-
-        try:
-            tracked = svc.add_tracked_token(user, blockchain_token_id)
-        except Exception as e:
-            ns.abort(400, str(e))
-
-        return {
-            "message": "Token added",
-            "blockchain_token_id": tracked.blockchain_token_id,
-        }, 201
-
-
-@ns.route("/tokens/remove")
-class TokensRemove(Resource):
-    """
-    Удаление токена из списка отслеживаемых пользователем.
-    """
-
-    @jwt_required()
-    @ns.expect(remove_blockchain_token_in)
-    def delete(self) -> tuple[dict, int]:
-        """
-        Удаляет токен из списка отслеживаемых текущим пользователем.
-
-        Метод требует JWT-авторизацию.
-
-        Args:
-            В теле запроса (JSON) должен присутствовать параметр:
-                blockchain_token_id (str): Идентификатор токена в блокчейне.
-
-        Raises:
-            400: Если параметр blockchain_token_id отсутствует в запросе.
-            404: Если пользователь не найден или токен не найден в списке отслеживаемых.
-            500: При ошибках удаления токена.
-
-        Returns:
-            dict: JSON с подтверждением удаления и идентификатором удалённого токена, например:
-                {
-                    "message": "Token removed",
-                    "blockchain_token_id": "<id_токена>"
-                }
-            HTTP статус 200 при успешном удалении.
-        """
-        user_id = get_jwt_identity()
-        user = User.query.get(user_id)
-        if not user:
-            ns.abort(404, "User not found")
-
-        blockchain_token_id = ns.payload.get("blockchain_token_id")
-        if not blockchain_token_id:
-            ns.abort(400, "blockchain_token_id required")
-
-        try:
-            removed = svc.remove_tracked_token(user, blockchain_token_id)
-            if not removed:
-                ns.abort(404, "Token not found in tracked list")
-        except Exception as e:
-            ns.abort(500, f"Failed to remove token: {e}")
-
-        logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
-        return {
-            "message": "Token removed",
-            "blockchain_token_id": blockchain_token_id,
-        }, 200

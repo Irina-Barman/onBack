@@ -35,10 +35,10 @@
 - get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]
     Получает балансы всех отслеживаемых токенов пользователя в сети, используя multicall при поддержке.
 
-- get_blockchain_token_balance(user_address: str, token_contract_address: str, network: str) -> Decimal
+# - get_blockchain_token_balance(user_address: str, token_contract_address: str, network: str) -> Decimal
     Получает баланс конкретного токена пользователя по адресу.
 
-- transfer_fee_table() -> Dict[str, Decimal]
+# - transfer_fee_table() -> Dict[str, Decimal]
     Загружает таблицу комиссий за перевод из базы данных.
 
 - get_balance(user: User, network: str, token_symbol: Optional[str] = None) -> Decimal
@@ -87,26 +87,15 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Tuple
 
 from multicall import Call, Multicall
-from sqlalchemy import func
+from web3.exceptions import ContractLogicError
 
 from onfine.blockchain.providers import (
-    BEP20,
-    ERC20,
-    TRC20,
     ProviderManager,
 )
 from onfine.extensions import db
-from onfine.models.blockchain_tokens import BlockchainTokens
-from onfine.models.ledger_entry import LedgerEntry
-from onfine.models.referral_balance import ReferralBalance
-from onfine.models.transactions import Transaction, TxStatus, TxType
-from onfine.models.transfer_fee import TransferFee
 from onfine.models.user import User
-from onfine.models.user_tracked_blockchain_tokens import (
-    UserTrackedBlockchainToken,
-)
 from onfine.models.wallet import Wallet
-from onfine.utils.ledger_decorator import LedgerType, ledger
+from onfine.services.token_service import get_tracked_blockchain_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -117,38 +106,6 @@ NATIVE_TOKENS: Dict[str, str] = {
     "bep20": "bnb",
     "trc20": "trx",
 }
-
-# Стандарты токенов для каждой сети
-TOKEN_STANDARDS: Dict[str, str] = {
-    "ethereum": "erc20",
-    "bsc": "bep20",
-    "tron": "trc20",
-}
-
-
-def _get_token_class(network: str, is_native_gas: bool = False) -> type:  # noqa: ARG001
-    """
-    Возвращает класс провайдера токена для указанной сети.
-
-    Args:
-        network (str): Название сети (например, "erc20", "bep20", "trc20").
-        is_native_gas (bool): Если True, возвращает класс для нативного токена газа (ETH, BNB, TRX),
-            иначе — для стандартных токенов (ERC20, BEP20, TRC20).
-
-    Raises:
-        ValueError: Если сеть неизвестна.
-
-    Returns:
-        type: Класс провайдера токена.
-    """
-    network = network.lower()
-    if network in ("erc20",):
-        return ERC20
-    if network in ("bep20",):
-        return BEP20
-    if network in ("trc20",):
-        return TRC20
-    raise ValueError(f"Unknown token network: {network}")
 
 
 def _gen_addr_pk(network: str) -> Tuple[str, str]:
@@ -161,8 +118,8 @@ def _gen_addr_pk(network: str) -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: Кортеж (адрес, незашифрованный приватный ключ).
     """
-    TokenClass = _get_token_class(network)
-    return TokenClass.generate_wallet()
+    provider = ProviderManager.get(network.lower())
+    return provider.generate_wallet()
 
 
 def create_wallets(user: User, networks: List[str]) -> Dict[str, str]:
@@ -222,97 +179,6 @@ def list_wallets(user: User) -> Optional[Dict[str, str]]:
     return wallets or None
 
 
-def get_all_active_blockchain_tokens(network: str) -> List[BlockchainTokens]:
-    """
-    Получает список всех активных токенов для заданной сети.
-
-    Args:
-        network (str): Название сети.
-
-    Returns:
-        List[BlockchainTokens]: Список активных токенов.
-    """
-    return BlockchainTokens.query.filter_by(network=network, is_active=True).all()
-
-
-def get_tracked_blockchain_tokens(user: User, network: str) -> List[BlockchainTokens]:
-    """
-    Получает список активных токенов, отслеживаемых пользователем в указанной сети.
-
-    Args:
-        user (User): Экземпляр пользователя.
-        network (str): Название сети.
-
-    Returns:
-        List[BlockchainTokens]: Список отслеживаемых токенов.
-    """
-    return (
-        BlockchainTokens.query.join(
-            UserTrackedBlockchainToken,
-            BlockchainTokens.id == UserTrackedBlockchainToken.blockchain_token_id,
-        )
-        .filter(
-            UserTrackedBlockchainToken.user_id == user.id,
-            BlockchainTokens.network == network,
-            BlockchainTokens.is_active.is_(True),
-        )
-        .all()
-    )
-
-
-def add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockchainToken:
-    """
-    Добавляет токен в список отслеживаемых пользователем.
-
-    Args:
-        user (User): Экземпляр пользователя.
-        blockchain_token_id (int): ID токена в базе.
-
-    Returns:
-        UserTrackedBlockchainToken: Созданная или существующая запись об отслеживании токена.
-    """
-    existing = UserTrackedBlockchainToken.query.filter_by(
-        user_id=user.id,
-        blockchain_token_id=blockchain_token_id,
-    ).first()
-    if existing:
-        return existing
-    tracked = UserTrackedBlockchainToken(user_id=user.id, blockchain_token_id=blockchain_token_id)
-    db.session.add(tracked)
-    db.session.commit()
-    return tracked
-
-
-def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
-    """
-    Удаляет токен из списка отслеживаемых пользователем.
-
-    Args:
-        user (User): Экземпляр пользователя.
-        blockchain_token_id (int): ID токена.
-
-    Returns:
-        bool: True, если удаление прошло успешно, False если токен не найден.
-
-    Raises:
-        Exception: При ошибках удаления из базы данных.
-    """
-    tracked = UserTrackedBlockchainToken.query.filter_by(
-        user_id=user.id,
-        blockchain_token_id=blockchain_token_id,
-    ).first()
-    if not tracked:
-        return False
-    db.session.delete(tracked)
-    try:
-        db.session.commit()
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Ошибка удаления отслеживаемого токена: {e}")
-        raise
-    return True
-
-
 def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     """
     Получает балансы всех отслеживаемых токенов пользователя в сети с использованием multicall, если это поддерживается.
@@ -334,55 +200,76 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
         return {}
 
     provider = ProviderManager.get(network.lower())
+    balances: Dict[str, Decimal] = {}
+
+    def _normalize(raw: int | str, decimals: int) -> Decimal:
+        try:
+            iv = int(raw)
+        except Exception:
+            iv = 0
+        scale = Decimal(10) ** int(decimals)
+        return Decimal(iv) / scale
+
     if provider.supports_multicall():
         w3 = provider.get_web3()
         calls = []
 
-        for token in blockchain_tokens:
-            if token.is_native_gas:
-                # Пропускаем нативный токен газа в multicall
+        for t in blockchain_tokens:
+            if t.is_native_gas:
                 continue
-            token_address = provider.to_checksum(token.contract_address)
+            provider = ProviderManager.get(network.lower(), contract_addr=t.contract_address)
             calls.append(
                 Call(
-                    token_address,
+                    provider.contract_addr,
                     ["balanceOf(address)(uint256)", wallet.address],
-                    [[f"{token.symbol}.balance", None]],
-                ),
-            )
-            calls.append(
-                Call(
-                    token_address,
-                    ["decimals()(uint8)"],
-                    [[f"{token.symbol}.decimals", None]],
+                    [[f"{t.contract_address}.balance", None]],
                 ),
             )
 
-        multi = Multicall(calls, _w3=w3)
-        results = multi()
+        try:
+            multi = Multicall(calls, _w3=w3)
+            results = multi()
+        except Exception:
+            results = None
 
-        balances = {}
-        for token in blockchain_tokens:
-            if token.is_native_gas:
-                # Получаем баланс нативного токена отдельным вызовом
-                balances[token.symbol] = provider.balance_native(wallet.address)
+        # сначала нативный газ
+        for t in blockchain_tokens:
+            if t.is_native_gas:
+                balances[t.symbol] = provider.balance_native(wallet.address)
+
+        if results is not None:
+            # нормализуем по decimals из ваших метаданных
+            for t in blockchain_tokens:
+                if t.is_native_gas:
+                    continue
+                raw = results.get(f"{t.contract_address}.balance", 0) or 0
+                balances[t.symbol] = _normalize(raw, getattr(t, "decimals", 18))
+            return balances
+
+    for t in blockchain_tokens:
+        try:
+            instance = ProviderManager.get(network.lower(), contract_addr=t.contract_address)
+            if t.is_native_gas:
+                bal = instance.balance_native(wallet.address)
+                balances[t.symbol] = Decimal(bal)
             else:
-                balance_raw = results.get(f"{token.symbol}.balance", 0) or 0
-                decimals = results.get(f"{token.symbol}.decimals", 18) or 18
-                balances[token.symbol] = Decimal(balance_raw) / (10**decimals)
-        return balances
+                bal = instance.balance(wallet.address)
+                if not isinstance(bal, Decimal):
+                    bal = _normalize(bal, getattr(t, "decimals", 18))
+                balances[t.symbol] = Decimal(bal)
+        except (ContractLogicError, ValueError):
+            continue
+        except Exception:
+            continue
 
-    balances = {}
-    for token in blockchain_tokens:
-        instance = ProviderManager.get(network.lower(), contract_addr=token.contract_address)
-        if token.is_native_gas:
-            balances[token.symbol] = instance.balance_native(wallet.address)
-        else:
-            balances[token.symbol] = instance.balance(wallet.address)
     return balances
 
 
-def get_blockchain_token_balance(user_address: str, token_contract_address: str, network: str) -> Decimal:
+def get_blockchain_token_balance(
+    user_address: str,
+    network: str,
+    token_contract_address: Optional[str] = None,
+) -> Decimal:
     """
     Получает баланс конкретного токена пользователя через класс провайдера.
 
@@ -394,330 +281,270 @@ def get_blockchain_token_balance(user_address: str, token_contract_address: str,
     Returns:
         Decimal: Баланс токена.
     """
-    TokenClass = _get_token_class(network)
-    return TokenClass.balance_of(token_contract_address, user_address)
+    provider = ProviderManager.get(network=network.lower(), contract_addr=token_contract_address)
+    if not token_contract_address:
+        return provider.balance_native(user_address)
+
+    return provider.balance(user_address)
 
 
-def transfer_fee_table() -> Dict[str, Decimal]:
-    """
-    Загружает таблицу комиссий за перевод из базы данных.
+# def transfer_fee_table() -> Dict[str, Decimal]:
+#     """
+#     Загружает таблицу комиссий за перевод из базы данных.
 
-    Raises:
-        ValueError: Если для каких-то токенов отсутствуют данные по комиссии.
+#     Raises:
+#         ValueError: Если для каких-то токенов отсутствуют данные по комиссии.
 
-    Returns:
-        Dict[str, Decimal]: Словарь с ключами — названия токенов, значениями — комиссии в USDT.
-    """
-    fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
-    missing = [token for token in NATIVE_TOKENS.values() if token not in fees]
-    if missing:
-        logger.error(f"Отсутствуют комиссии для токенов: {', '.join(missing)}")
-        raise ValueError(f"Missing transfer fees for native tokens: {', '.join(missing)}")
-    return fees
-
-
-def get_balance(user: User, network: str, token_symbol: Optional[str] = None) -> Decimal:
-    """
-    Получает баланс пользователя в указанной сети через класс провайдера.
-
-    Args:
-        user (User): Экземпляр пользователя.
-        network (str): Название сети.
-        token_symbol (Optional[str]): Символ токена (если None — баланс нативного токена).
-
-    Returns:
-        Decimal: Баланс пользователя.
-    """
-    wallet = next((w for w in user.wallets if w.network == network), None)
-    if not wallet:
-        return Decimal(0)
-    TokenClass = _get_token_class(network)
-    return TokenClass.balance(wallet.address, token_symbol)
+#     Returns:
+#         Dict[str, Decimal]: Словарь с ключами — названия токенов, значениями — комиссии в USDT.
+#     """
+#     fees = {r.network: Decimal(r.fee_usdt) for r in TransferFee.query.all()}
+#     missing = [token for token in NATIVE_TOKENS.values() if token not in fees]
+#     if missing:
+#         logger.error(f"Отсутствуют комиссии для токенов: {', '.join(missing)}")
+#         raise ValueError(f"Missing transfer fees for native tokens: {', '.join(missing)}")
+#     return fees
 
 
-def user_balance_stub(user: User) -> Dict[str, Decimal]:
-    """
-    Вычисляет псевдо-баланс пользователя на основе истории подтверждённых транзакций.
+# def get_balance(user: User, network: str, token_symbol: Optional[str] = None) -> Decimal:
+#     """
+#     Получает баланс пользователя в указанной сети через класс провайдера.
 
-    Args:
-        user (User): Экземпляр пользователя.
+#     Args:
+#         user (User): Экземпляр пользователя.
+#         network (str): Название сети.
+#         token_symbol (Optional[str]): Символ токена (если None — баланс нативного токена).
 
-    Returns:
-        Dict[str, Decimal]: Словарь с ключами в формате "{сеть}_balance" и значениями — суммами балансов.
-    """
-    balances = {f"{net}_balance": Decimal(0) for net in SUPPORTED_NETWORKS}
-
-    results = (
-        db.session.query(
-            Transaction.network,
-            Transaction.type,
-            func.coalesce(func.sum(Transaction.amount), 0),
-        )
-        .filter(
-            Transaction.user_id == user.id,
-            Transaction.network.in_(SUPPORTED_NETWORKS),
-            Transaction.status == TxStatus.confirmed,
-            Transaction.type.in_([TxType.deposit, TxType.withdraw]),
-        )
-        .group_by(Transaction.network, Transaction.type)
-        .all()
-    )
-
-    for network, tx_type, amount_sum in results:
-        key = f"{network}_balance"
-        if tx_type == TxType.deposit:
-            balances[key] += Decimal(amount_sum)
-        elif tx_type == TxType.withdraw:
-            balances[key] -= Decimal(amount_sum)
-
-    return balances
+#     Returns:
+#         Decimal: Баланс пользователя.
+#     """
+#     wallet = next((w for w in user.wallets if w.network == network), None)
+#     if not wallet:
+#         return Decimal(0)
+#     TokenClass = _get_token_class(network)
+#     return TokenClass.balance(wallet.address, token_symbol)
 
 
-def history(user: User) -> List[Transaction]:
-    """
-    Возвращает историю транзакций пользователя, отсортированную по дате от новых к старым.
+# def user_balance_stub(user: User) -> Dict[str, Decimal]:
+#     """
+#     Вычисляет псевдо-баланс пользователя на основе истории подтверждённых транзакций.
 
-    Args:
-        user (User): Экземпляр пользователя.
+#     Args:
+#         user (User): Экземпляр пользователя.
 
-    Returns:
-        List[Transaction]: Список транзакций пользователя.
-    """
-    return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
+#     Returns:
+#         Dict[str, Decimal]: Словарь с ключами в формате "{сеть}_balance" и значениями — суммами балансов.
+#     """
+#     balances = {f"{net}_balance": Decimal(0) for net in SUPPORTED_NETWORKS}
 
+#     results = (
+#         db.session.query(
+#             Transaction.network,
+#             Transaction.type,
+#             func.coalesce(func.sum(Transaction.amount), 0),
+#         )
+#         .filter(
+#             Transaction.user_id == user.id,
+#             Transaction.network.in_(SUPPORTED_NETWORKS),
+#             Transaction.status == TxStatus.confirmed,
+#             Transaction.type.in_([TxType.deposit, TxType.withdraw]),
+#         )
+#         .group_by(Transaction.network, Transaction.type)
+#         .all()
+#     )
 
-def balance_for(user: User, network: str) -> Decimal:
-    """
-    Возвращает псевдо-баланс пользователя по указанной сети.
+#     for network, tx_type, amount_sum in results:
+#         key = f"{network}_balance"
+#         if tx_type == TxType.deposit:
+#             balances[key] += Decimal(amount_sum)
+#         elif tx_type == TxType.withdraw:
+#             balances[key] -= Decimal(amount_sum)
 
-    Args:
-        user (User): Экземпляр пользователя.
-        network (str): Название сети.
-
-    Returns:
-        Decimal: Баланс пользователя.
-    """
-    return user_balance_stub(user)[f"{network}_balance"]
-
-
-@ledger(
-    LedgerType.purchase,
-    direction="out",
-    network_from_arg="network",
-    amount_from_arg="amount",
-)
-def debit(user: User, network: str, amount: Decimal) -> Transaction:
-    """
-    Списывает средства пользователя (операция покупки).
-
-    Args:
-        user (User): Экземпляр пользователя.
-        network (str): Название сети.
-        amount (Decimal): Сумма списания.
-
-    Returns:
-        Transaction: Созданная транзакция списания.
-    """
-    tx = Transaction(
-        user_id=user.id,
-        type=TxType.purchase,
-        status=TxStatus.confirmed,
-        network=network,
-        amount=amount,
-    )
-    db.session.add(tx)
-    db.session.commit()
-    return tx
+#     return balances
 
 
-@ledger(
-    LedgerType.withdraw,
-    direction="out",
-    network_from_arg="network",
-    amount_from_arg="amount",
-)
-def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_code: str) -> Transaction:
-    """
-    Выполняет вывод средств пользователя из указанной сети на внешний адрес.
+# def history(user: User) -> List[Transaction]:
+#     """
+#     Возвращает историю транзакций пользователя, отсортированную по дате от новых к старым.
 
-    Args:
-        user (User): Экземпляр пользователя.
-        network (str): Название сети.
-        amount (Decimal): Сумма вывода.
-        dest (str): Адрес получателя.
-        twofa_code (str): Код двухфакторной аутентификации.
+#     Args:
+#         user (User): Экземпляр пользователя.
 
-    Raises:
-        ValueError: При неизвестной сети, неверном 2FA-коде, недостаточном балансе или отсутствии кошелька.
-
-    Returns:
-        Transaction: Созданная транзакция вывода.
-    """
-    if network not in SUPPORTED_NETWORKS:
-        raise ValueError(f"Unknown network: {network}")
-    if twofa_code != "123456":
-        raise ValueError("Invalid 2FA-code")
-
-    native_token = NATIVE_TOKENS.get(network)
-    if native_token is None:
-        raise ValueError(f"No native token defined for network '{network}'")
-
-    fee_table = transfer_fee_table()
-    fee = fee_table.get(native_token)
-    if fee is None:
-        raise ValueError(f"Transfer fee for token '{native_token}' not found.")
-
-    total = amount + fee
-
-    if balance_for(user, network) < total:
-        raise ValueError("Insufficient balance")
-
-    wallet = next((w for w in user.wallets if w.network == network), None)
-    if not wallet:
-        raise ValueError("Wallet not found")
-
-    pk = Wallet.decrypt_pk(wallet.pk_enc)
-
-    # Используем класс нативного токена газа для перевода
-    TokenClass = _get_token_class(network, is_native_gas=True)
-
-    tx_hash = TokenClass.transfer(pk, dest, amount)
-
-    tx = Transaction(
-        user_id=user.id,
-        type=TxType.withdraw,
-        status=TxStatus.pending,
-        network=network,
-        amount=amount,
-        fee=fee,
-        address=dest,
-    )
-    db.session.add(tx)
-    db.session.commit()
-    logger.info(f"[WITHDRAW] {network} tx_hash={tx_hash}")
-    return tx
+#     Returns:
+#         List[Transaction]: Список транзакций пользователя.
+#     """
+#     return Transaction.query.filter_by(user_id=user.id).order_by(Transaction.created_at.desc()).all()
 
 
-def ref_balance(user: User) -> Decimal:
-    """
-    Возвращает текущий баланс реферальных средств пользователя.
+# def balance_for(user: User, network: str) -> Decimal:
+#     """
+#     Возвращает псевдо-баланс пользователя по указанной сети.
 
-    Args:
-        user (User): Экземпляр пользователя.
+#     Args:
+#         user (User): Экземпляр пользователя.
+#         network (str): Название сети.
 
-    Returns:
-        Decimal: Баланс реферальных средств, 0 если записи нет.
-    """
-    rb = ReferralBalance.query.get(user.id)
-    return Decimal(rb.balance) if rb else Decimal(0)
-
-
-def ref_credit(user_id: int, amount: Decimal) -> None:
-    """
-    Начисляет реферальные средства пользователю.
-
-    Args:
-        user_id (int): ID пользователя.
-        amount (Decimal): Сумма для начисления.
-    """
-    rb = ReferralBalance.query.get(user_id)
-    if not rb:
-        rb = ReferralBalance(user_id=user_id, balance=amount)
-        db.session.add(rb)
-    else:
-        rb.balance += amount
-    db.session.flush()
+#     Returns:
+#         Decimal: Баланс пользователя.
+#     """
+#     return user_balance_stub(user)[f"{network}_balance"]
 
 
-@ledger(LedgerType.referral, direction="out")
-def ref_debit(user: User, amount: Decimal) -> Transaction:
-    """
-    Списывает реферальные средства пользователя.
+# @ledger(
+#     LedgerType.purchase,
+#     direction="out",
+#     network_from_arg="network",
+#     amount_from_arg="amount",
+# )
+# def debit(user: User, network: str, amount: Decimal) -> Transaction:
+#     """
+#     Списывает средства пользователя (операция покупки).
 
-    Args:
-        user (User): Экземпляр пользователя.
-        amount (Decimal): Сумма списания.
+#     Args:
+#         user (User): Экземпляр пользователя.
+#         network (str): Название сети.
+#         amount (Decimal): Сумма списания.
 
-    Raises:
-        ValueError: Если недостаточно средств на реферальном балансе.
-
-    Returns:
-        Transaction: Созданная транзакция списания.
-    """
-    rb = ReferralBalance.query.get(user.id)
-    if not rb or rb.balance < amount:
-        raise ValueError("Not enough referral balance")
-
-    rb.balance -= amount
-    tx = Transaction(
-        user_id=user.id,
-        type=TxType.referral,
-        status=TxStatus.confirmed,
-        network="ref",
-        amount=-amount,
-    )
-    db.session.add(tx)
-    db.session.flush()
-    return tx
+#     Returns:
+#         Transaction: Созданная транзакция списания.
+#     """
+#     tx = Transaction(
+#         user_id=user.id,
+#         type=TxType.purchase,
+#         status=TxStatus.confirmed,
+#         network=network,
+#         amount=amount,
+#     )
+#     db.session.add(tx)
+#     db.session.commit()
+#     return tx
 
 
-@ledger(
-    LedgerType.purchase,
-    direction="out",
-    network_from_arg="network",
-    amount_from_arg="amount",
-)
-def credit_to_user_balance(user: User, network: str, amount: Decimal) -> Transaction:
-    """
-    Начисляет средства пользователю (например, прибыль).
+# @ledger(
+#     LedgerType.withdraw,
+#     direction="out",
+#     network_from_arg="network",
+#     amount_from_arg="amount",
+# )
+# def withdraw_funds(user: User, network: str, amount: Decimal, dest: str, twofa_code: str) -> Transaction:
+#     """
+#     Выполняет вывод средств пользователя из указанной сети на внешний адрес.
 
-    Args:
-        user (User): Экземпляр пользователя.
-        network (str): Название сети.
-        amount (Decimal): Сумма для начисления.
+#     Args:
+#         user (User): Экземпляр пользователя.
+#         network (str): Название сети.
+#         amount (Decimal): Сумма вывода.
+#         dest (str): Адрес получателя.
+#         twofa_code (str): Код двухфакторной аутентификации.
 
-    Returns:
-        Transaction: Созданная транзакция начисления.
-    """
-    tx = Transaction(
-        user_id=user.id,
-        type=TxType.profit,
-        status=TxStatus.confirmed,
-        network=network,
-        amount=amount,
-    )
-    db.session.add(tx)
-    db.session.commit()
-    return tx
+#     Raises:
+#         ValueError: При неизвестной сети, неверном 2FA-коде, недостаточном балансе или отсутствии кошелька.
+
+#     Returns:
+#         Transaction: Созданная транзакция вывода.
+#     """
+#     if network not in SUPPORTED_NETWORKS:
+#         raise ValueError(f"Unknown network: {network}")
+#     if twofa_code != "123456":
+#         raise ValueError("Invalid 2FA-code")
+
+#     native_token = NATIVE_TOKENS.get(network)
+#     if native_token is None:
+#         raise ValueError(f"No native token defined for network '{network}'")
+
+#     fee_table = transfer_fee_table()
+#     fee = fee_table.get(native_token)
+#     if fee is None:
+#         raise ValueError(f"Transfer fee for token '{native_token}' not found.")
+
+#     total = amount + fee
+
+#     if balance_for(user, network) < total:
+#         raise ValueError("Insufficient balance")
+
+#     wallet = next((w for w in user.wallets if w.network == network), None)
+#     if not wallet:
+#         raise ValueError("Wallet not found")
+
+#     pk = Wallet.decrypt_pk(wallet.pk_enc)
+
+#     # Используем класс нативного токена газа для перевода
+#     TokenClass = _get_token_class(network, is_native_gas=True)
+
+#     tx_hash = TokenClass.transfer(pk, dest, amount)
+
+#     tx = Transaction(
+#         user_id=user.id,
+#         type=TxType.withdraw,
+#         status=TxStatus.pending,
+#         network=network,
+#         amount=amount,
+#         fee=fee,
+#         address=dest,
+#     )
+#     db.session.add(tx)
+#     db.session.commit()
+#     logger.info(f"[WITHDRAW] {network} tx_hash={tx_hash}")
+#     return tx
 
 
-def credit_to_network_balance(user_id: int, network: str, amount: Decimal) -> None:
-    """
-    Начисляет средства на баланс пользователя в указанной сети.
+# @ledger(
+#     LedgerType.purchase,
+#     direction="out",
+#     network_from_arg="network",
+#     amount_from_arg="amount",
+# )
+# def credit_to_user_balance(user: User, network: str, amount: Decimal) -> Transaction:
+#     """
+#     Начисляет средства пользователю (например, прибыль).
 
-    Args:
-        user_id (int): ID пользователя.
-        network (str): Название сети.
-        amount (Decimal): Сумма для начисления.
-    """
-    tx = Transaction(
-        user_id=user_id,
-        type=TxType.deposit,
-        status=TxStatus.confirmed,
-        network=network,
-        amount=amount,
-    )
-    db.session.add(tx)
-    db.session.flush()
-    db.session.add(
-        LedgerEntry(
-            user_id=user_id,
-            origin_table="transactions",
-            origin_id=tx.id,
-            type=LedgerType.deposit,
-            direction="in",
-            network=network,
-            amount=amount,
-        ),
-    )
-    db.session.commit()
+#     Args:
+#         user (User): Экземпляр пользователя.
+#         network (str): Название сети.
+#         amount (Decimal): Сумма для начисления.
+
+#     Returns:
+#         Transaction: Созданная транзакция начисления.
+#     """
+#     tx = Transaction(
+#         user_id=user.id,
+#         type=TxType.profit,
+#         status=TxStatus.confirmed,
+#         network=network,
+#         amount=amount,
+#     )
+#     db.session.add(tx)
+#     db.session.commit()
+#     return tx
+
+
+# def credit_to_network_balance(user_id: int, network: str, amount: Decimal) -> None:
+#     """
+#     Начисляет средства на баланс пользователя в указанной сети.
+
+#     Args:
+#         user_id (int): ID пользователя.
+#         network (str): Название сети.
+#         amount (Decimal): Сумма для начисления.
+#     """
+#     tx = Transaction(
+#         user_id=user_id,
+#         type=TxType.deposit,
+#         status=TxStatus.confirmed,
+#         network=network,
+#         amount=amount,
+#     )
+#     db.session.add(tx)
+#     db.session.flush()
+#     db.session.add(
+#         LedgerEntry(
+#             user_id=user_id,
+#             origin_table="transactions",
+#             origin_id=tx.id,
+#             type=LedgerType.deposit,
+#             direction="in",
+#             network=network,
+#             amount=amount,
+#         ),
+#     )
+#     db.session.commit()

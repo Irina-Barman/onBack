@@ -12,13 +12,12 @@ logger = logging.getLogger(__name__)
 # Получение ключа шифрования из переменной окружения
 _key_b64 = os.getenv("FERNET_KEY")
 if not _key_b64:
-    _key_b64 = Fernet.generate_key().decode()
-    logger.warning(
-        "FERNET_KEY not set; generated temporary key:\n%s\n" "Add it to your .env to persist encrypted private keys!",
-        _key_b64,
-    )
+    raise RuntimeError("FATAL ERROR - FERNET_KEY is not set in environment. Application cannot start.")
 
-FERNET = Fernet(_key_b64.encode())
+try:
+    FERNET = Fernet(_key_b64.encode())
+except Exception as e:
+    raise RuntimeError(f"FATAL ERROR - Invalid FERNET_KEY format: {e}")
 
 
 # --------------------------------------------------------- модель Wallet

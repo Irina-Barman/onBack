@@ -8,6 +8,7 @@ from tronpy.keys import PrivateKey
 from tronpy.providers import HTTPProvider
 from web3 import Web3
 
+# Твой класс Wallet из БД
 from onfine.blockchain.token_abi_loder import get_token_abi
 
 logger = logging.getLogger(__name__)
@@ -58,6 +59,18 @@ class TokenNetwork:
         return False
 
     def balance(self, address: str) -> Decimal:
+        """
+        Получает баланс токена на указанном адресе.
+
+        Args:
+            address (str): Адрес кошелька.
+
+        Returns:
+            Decimal: Баланс токена.
+        """
+        raise NotImplementedError()
+
+    def balance_native(self, addr: str) -> Decimal:  # noqa: D417
         """
         Получает баланс токена на указанном адресе.
 

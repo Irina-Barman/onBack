@@ -7,7 +7,7 @@ from typing import Any, Dict, List, TypedDict
 from sqlalchemy.orm import joinedload
 from web3 import Web3
 
-from onfine.blockchain.providers import BEP20, ERC20, TRC20
+from onfine.blockchain.providers import TRC20, ProviderManager
 from onfine.models.wallet import Wallet
 from onfine.services.email_service import EmailService
 
@@ -421,7 +421,7 @@ def confirm_transaction(transaction: Transaction) -> bool:  # noqa: PLR0911
 
     # Дешифруем приватный ключ кошелька
     try:
-        user_private_key = Wallet.decrypt_pk(wallet.pk_enc)
+        user_private_key = Wallet.decrypt_pk(wallet.pk_enc)  # noqa: F841
     except Exception as e:
         logger.error(f"Ошибка при дешифровании приватного ключа: {e}")
         return False
@@ -430,14 +430,8 @@ def confirm_transaction(transaction: Transaction) -> bool:  # noqa: PLR0911
     logger.info(f"Отправка средств на адрес {to_address}")
 
     try:
-        # Выполнение перевода в зависимости от сети
-        if network == "ERC20":
-            tx_id = ERC20.transfer(user_private_key, to_address, amount)
-        elif network == "BEP20":
-            tx_id = BEP20.transfer(user_private_key, to_address, amount)
-        elif network == "TRC20":
-            tx_id = TRC20.transfer(user_private_key, to_address, amount)
-        else:
+        tx_id = ProviderManager.get(network.lower())  # noqa: F841
+        if not tx_id:
             logger.error(f"Неизвестная сеть: {network}")
             return False
 
