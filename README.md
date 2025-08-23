@@ -242,4 +242,15 @@ docker compose exec kafka kafka-topics.sh --create \
   --partitions 1 \
   --topic error_emails
 
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic gas_topup_request
+
+docker compose exec kafka kafka-topics.sh --create \
+  --bootstrap-server kafka:9092 \
+  --replication-factor 1 \
+  --partitions 1 \
+  --topic gas_confirm_request
 ```

@@ -7,6 +7,7 @@ from tronpy import Tron
 from tronpy.keys import PrivateKey
 from tronpy.providers import HTTPProvider
 from web3 import Web3
+from web3.types import TxParams
 
 # Твой класс Wallet из БД
 from onfine.blockchain.token_abi_loder import get_token_abi
@@ -289,6 +290,92 @@ class ERC20(TokenNetwork):
         code = self.w3.eth.get_code(self.contract_addr)
         return bool(code and code != b"\x00")
 
+    def build_user_token_transfer(  # noqa: D102
+        self,
+        user_addr: str,
+        to_addr: str,
+        amount: Decimal,
+        nonce: int,
+    ) -> TxParams:  # noqa: D102
+        amount_raw = int(amount * (10**self._decimals))
+        # стараемся использовать EIP-1559, если нода поддерживает; иначе legacy gasPrice
+        base_fee = self.w3.eth.get_block("pending").get("baseFeePerGas")
+        gas_limit = self.contract.functions.transfer(to_addr, amount_raw).estimate_gas({"from": user_addr})
+        if base_fee is not None:
+            max_priority = self.w3.to_wei("1", "gwei")
+            max_fee = int(base_fee + max_priority * 2)
+            return {
+                "from": user_addr,
+                "to": self.contract.address,
+                "nonce": nonce,
+                "data": self.contract.encode_abi(fn_name="transfer", args=[to_addr, amount_raw]),
+                "gas": int(gas_limit * 1.2),  # небольшой буфер
+                "maxPriorityFeePerGas": max_priority,
+                "maxFeePerGas": max_fee,
+                "chainId": self.w3.eth.chain_id,
+            }
+        else:
+            gas_price = self.w3.eth.gas_price
+            return {
+                "from": user_addr,
+                "to": self.contract.address,
+                "nonce": nonce,
+                "data": self.contract.encode_abi(fn_name="transfer", args=[to_addr, amount_raw]),
+                "gas": int(gas_limit * 1.2),
+                "gasPrice": gas_price,
+                "chainId": self.w3.eth.chain_id,
+            }
+
+    def sign_user_tx(self, unsigned_tx: dict, user_pk: str) -> tuple[bytes, str]:  # noqa: D102
+        signed = self.w3.eth.account.sign_transaction(unsigned_tx, private_key=user_pk)
+        return signed.rawTransaction, signed.hash.hex()
+
+    def publish_raw_tx(self, raw_tx: bytes) -> str:  # noqa: D102
+        tx_hash = self.w3.eth.send_raw_transaction(raw_tx)
+        return tx_hash.hex()
+
+    def estimate_native_for_tx(self, unsigned_tx: dict) -> Decimal:  # noqa: D102
+        # EIP-1559 или legacy
+        gas = Decimal(unsigned_tx["gas"])
+        if "maxFeePerGas" in unsigned_tx:
+            fee_per_gas = Decimal(unsigned_tx["maxFeePerGas"])
+        else:
+            fee_per_gas = Decimal(unsigned_tx["gasPrice"])
+        wei = gas * fee_per_gas
+        return Decimal(wei) / Decimal(10**18)
+
+    def send_native(self, platform_pk: str, to_addr: str, amount_native: Decimal) -> str:  # noqa: D102
+        acct = self.w3.eth.account.from_key(platform_pk)
+        nonce = self.w3.eth.get_transaction_count(acct.address, "pending")
+        value = int(amount_native * Decimal(10**18))
+        base_fee = self.w3.eth.get_block("pending").get("baseFeePerGas")
+        if base_fee is not None:
+            max_priority = self.w3.to_wei("1", "gwei")
+            max_fee = int(base_fee + max_priority * 2)
+            tx = {
+                "to": Web3.to_checksum_address(to_addr),
+                "from": acct.address,
+                "value": value,
+                "nonce": nonce,
+                "gas": 21000,
+                "maxPriorityFeePerGas": max_priority,
+                "maxFeePerGas": max_fee,
+                "chainId": self.w3.eth.chain_id,
+            }
+        else:
+            tx = {
+                "to": Web3.to_checksum_address(to_addr),
+                "from": acct.address,
+                "value": value,
+                "nonce": nonce,
+                "gas": 21000,
+                "gasPrice": self.w3.eth.gas_price,
+                "chainId": self.w3.eth.chain_id,
+            }
+        signed = self.w3.eth.account.sign_transaction(tx, private_key=platform_pk)
+        tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
+        return tx_hash.hex()
+
 
 class BEP20(ERC20):
     """
@@ -537,6 +624,47 @@ class TRC20(TokenNetwork):
             return True
         except Exception:
             return False
+
+    def build_user_token_transfer(  # noqa: D102, ANN201
+        self,
+        user_addr: str,
+        to_addr: str,
+        amount: Decimal,
+        reserved_nonce: int | None = None,  # noqa: ARG002
+    ):
+        # reserved_nonce для совместимости интерфейса; TRON сам считает nonce
+        amount_raw = int(amount * (10**self._decimals))
+        txn = (
+            self.contract.functions.transfer(to_addr, amount_raw)
+            .with_owner(user_addr)
+            .fee_limit(10_000_000)  # 10 TRX в sun; подкорректируй при необходимости
+            .build()
+        )
+        return txn  # tronpy Transaction object
+
+    def sign_user_tx(self, unsigned_tx, user_pk: str) -> tuple[bytes, str]:  # noqa: ANN001, D102
+        priv = PrivateKey(bytes.fromhex(user_pk))
+        signed = unsigned_tx.sign(priv)
+        raw = signed.tx.raw_data.hex().encode()  # сохраняем как bytes
+        txid = signed.tx.txid
+        return raw, txid
+
+    def publish_raw_tx(self, raw_tx: bytes) -> str:  # noqa: D102
+        # для TRON нужно восстановить txn — если ты сохраняешь signed в базе, лучше сохранять signed.tx.serialize()
+        # здесь предполагаем, что мы публикуем сразу после sign (в типовом воркфлоу)
+        raise NotImplementedError("Publish from raw requires full txn object; публикуй сразу после sign в воркере")
+
+    def estimate_native_for_tx(self, unsigned_tx) -> Decimal:  # noqa: D102, ANN001
+        return Decimal(unsigned_tx.fee_limit) / Decimal(1_000_000)
+
+    def send_native(self, platform_pk: str, to_addr: str, amount_native: Decimal) -> str:  # noqa: D102
+        priv = PrivateKey(bytes.fromhex(platform_pk))
+        amount_sun = int(amount_native * Decimal(1_000_000))
+        txn = self.client.trx.transfer(priv.public_key.to_base58check_address(), to_addr, amount_sun).build().sign(priv)
+        res = txn.broadcast()
+        if not res.get("result"):
+            raise Exception(f"TRX transfer failed: {res}")
+        return res["txid"]
 
 
 class ProviderManager:

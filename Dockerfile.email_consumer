@@ -10,5 +10,5 @@ RUN apk add --no-cache gcc musl-dev postgresql-dev libffi-dev openssl-dev \
 
 COPY . .
 
-CMD ["python", "-m", "onfine.email_consumer"]
+CMD ["python", "-m", "onfine.worker.email_consumer"]
 
