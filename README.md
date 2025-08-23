@@ -183,7 +183,7 @@ docker compose exec api python -m onfine.scripts.update_info
 # Запускаем скрипт наполнения проперти пакетов(условия в числовом и текствовом формате)
 docker compose exec api python -m onfine.scripts.update_package_properties
 
-open http://localhost:5000/api/docs
+open http://localhost:5500/api/docs
 ```
 
 если необходимо
