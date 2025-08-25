@@ -29,6 +29,7 @@ __all__ = [
     "MiningEquipment",
     "MiningProfitBatch",
     "NetworkGas",
+    "PlatformGasExpense",
     "Package",
     "PackageInfo",
     "PackageProperty",
@@ -44,6 +45,5 @@ __all__ = [
     "User",
     "Wallet",
     "EmailLog",
-    "PlatformGasExpense",
     "WalletLock",
 ]
