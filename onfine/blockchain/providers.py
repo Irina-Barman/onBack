@@ -132,9 +132,15 @@ class ERC20(TokenNetwork):
         """
         self.network = "ERC20"
         self.w3 = self._w3()
-        self.contract_addr = Web3.to_checksum_address(contract_addr or os.getenv("USDT_ERC_CONTRACT_ADDR"))
-        self.abi = get_token_abi(network=self.network, contract_addr=self.contract_addr)
-        self.contract = self.w3.eth.contract(address=self.contract_addr, abi=self.abi)
+        self.contract_addr = Web3.to_checksum_address(
+            contract_addr or os.getenv("USDT_ERC_CONTRACT_ADDR")
+        )
+        self.abi = get_token_abi(
+            network=self.network, contract_addr=self.contract_addr
+        )
+        self.contract = self.w3.eth.contract(
+            address=self.contract_addr, abi=self.abi
+        )
         self._decimals = self._get_decimals()
 
     @staticmethod
@@ -202,7 +208,9 @@ class ERC20(TokenNetwork):
         try:
             return self.contract.functions.decimals().call()
         except Exception as e:
-            logger.info(f"[ERC20] Error getting decimals from {self.contract_addr}, fallback to 18: {e}")
+            logger.info(
+                f"[ERC20] Error getting decimals from {self.contract_addr}, fallback to 18: {e}"
+            )
             return 18
 
     def balance(self, addr: str) -> Decimal:
@@ -247,7 +255,9 @@ class ERC20(TokenNetwork):
         """
         acct = self.w3.eth.account.privateKeyToAccount(pk)
         to_addr = Web3.to_checksum_address(to_addr)
-        tx = self.contract.functions.transfer(to_addr, int(amount * (10**self._decimals))).build_transaction(
+        tx = self.contract.functions.transfer(
+            to_addr, int(amount * (10**self._decimals))
+        ).build_transaction(
             {"from": acct.address},
         )
         gas = self.w3.eth.estimateGas(tx)
@@ -269,7 +279,9 @@ class ERC20(TokenNetwork):
         acct = self.w3.eth.account.privateKeyToAccount(pk)
         to_addr = Web3.to_checksum_address(to_addr)
         nonce = self.w3.eth.getTransactionCount(acct.address)
-        tx = self.contract.functions.transfer(to_addr, int(amount * (10**self._decimals))).build_transaction(
+        tx = self.contract.functions.transfer(
+            to_addr, int(amount * (10**self._decimals))
+        ).build_transaction(
             {
                 "from": acct.address,
                 "nonce": nonce,
@@ -300,7 +312,9 @@ class ERC20(TokenNetwork):
         amount_raw = int(amount * (10**self._decimals))
         # стараемся использовать EIP-1559, если нода поддерживает; иначе legacy gasPrice
         base_fee = self.w3.eth.get_block("pending").get("baseFeePerGas")
-        gas_limit = self.contract.functions.transfer(to_addr, amount_raw).estimate_gas({"from": user_addr})
+        gas_limit = self.contract.functions.transfer(
+            to_addr, amount_raw
+        ).estimate_gas({"from": user_addr})
         if base_fee is not None:
             max_priority = self.w3.to_wei("1", "gwei")
             max_fee = int(base_fee + max_priority * 2)
@@ -308,7 +322,9 @@ class ERC20(TokenNetwork):
                 "from": user_addr,
                 "to": self.contract.address,
                 "nonce": nonce,
-                "data": self.contract.encode_abi(fn_name="transfer", args=[to_addr, amount_raw]),
+                "data": self.contract.encode_abi(
+                    fn_name="transfer", args=[to_addr, amount_raw]
+                ),
                 "gas": int(gas_limit * 1.2),  # небольшой буфер
                 "maxPriorityFeePerGas": max_priority,
                 "maxFeePerGas": max_fee,
@@ -320,14 +336,20 @@ class ERC20(TokenNetwork):
                 "from": user_addr,
                 "to": self.contract.address,
                 "nonce": nonce,
-                "data": self.contract.encode_abi(fn_name="transfer", args=[to_addr, amount_raw]),
+                "data": self.contract.encode_abi(
+                    fn_name="transfer", args=[to_addr, amount_raw]
+                ),
                 "gas": int(gas_limit * 1.2),
                 "gasPrice": gas_price,
                 "chainId": self.w3.eth.chain_id,
             }
 
-    def sign_user_tx(self, unsigned_tx: dict, user_pk: str) -> tuple[bytes, str]:  # noqa: D102
-        signed = self.w3.eth.account.sign_transaction(unsigned_tx, private_key=user_pk)
+    def sign_user_tx(
+        self, unsigned_tx: dict, user_pk: str
+    ) -> tuple[bytes, str]:  # noqa: D102
+        signed = self.w3.eth.account.sign_transaction(
+            unsigned_tx, private_key=user_pk
+        )
         return signed.rawTransaction, signed.hash.hex()
 
     def publish_raw_tx(self, raw_tx: bytes) -> str:  # noqa: D102
@@ -344,7 +366,9 @@ class ERC20(TokenNetwork):
         wei = gas * fee_per_gas
         return Decimal(wei) / Decimal(10**18)
 
-    def send_native(self, platform_pk: str, to_addr: str, amount_native: Decimal) -> str:  # noqa: D102
+    def send_native(
+        self, platform_pk: str, to_addr: str, amount_native: Decimal
+    ) -> str:  # noqa: D102
         acct = self.w3.eth.account.from_key(platform_pk)
         nonce = self.w3.eth.get_transaction_count(acct.address, "pending")
         value = int(amount_native * Decimal(10**18))
@@ -372,7 +396,9 @@ class ERC20(TokenNetwork):
                 "gasPrice": self.w3.eth.gas_price,
                 "chainId": self.w3.eth.chain_id,
             }
-        signed = self.w3.eth.account.sign_transaction(tx, private_key=platform_pk)
+        signed = self.w3.eth.account.sign_transaction(
+            tx, private_key=platform_pk
+        )
         tx_hash = self.w3.eth.send_raw_transaction(signed.rawTransaction)
         return tx_hash.hex()
 
@@ -400,9 +426,15 @@ class BEP20(ERC20):
         """
         self.network = "BEP20"
         self.w3 = self._w3()
-        self.contract_addr = Web3.to_checksum_address(contract_addr or os.getenv("USDT_BEP_CONTRACT_ADDR"))
-        self.abi = get_token_abi(network=self.network, contract_addr=self.contract_addr)
-        self.contract = self.w3.eth.contract(address=self.contract_addr, abi=self.abi)
+        self.contract_addr = Web3.to_checksum_address(
+            contract_addr or os.getenv("USDT_BEP_CONTRACT_ADDR")
+        )
+        self.abi = get_token_abi(
+            network=self.network, contract_addr=self.contract_addr
+        )
+        self.contract = self.w3.eth.contract(
+            address=self.contract_addr, abi=self.abi
+        )
         self._decimals = self._get_decimals()
 
     @staticmethod
@@ -470,7 +502,9 @@ class BEP20(ERC20):
         try:
             return self.contract.functions.decimals().call()
         except Exception as e:
-            logger.info(f"[BEP20] Error getting decimals from {self.contract_addr}, fallback to 18: {e}")
+            logger.info(
+                f"[BEP20] Error getting decimals from {self.contract_addr}, fallback to 18: {e}"
+            )
             return 18
 
 
@@ -494,9 +528,13 @@ class TRC20(TokenNetwork):
             contract_addr (Optional[str]): Адрес контракта TRC20 токена.
                 Если None, используется переменная окружения USDT_TRC_CONTRACT_ADDR.
         """
-        self.client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
+        self.client = Tron(
+            provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY"))
+        )
         self.network = "TRC20"
-        self.contract_addr = contract_addr or os.getenv("USDT_TRC_CONTRACT_ADDR")
+        self.contract_addr = contract_addr or os.getenv(
+            "USDT_TRC_CONTRACT_ADDR"
+        )
         self.abi = get_token_abi(self.network, self.contract_addr)
         self.contract = self.client.get_contract(self.contract_addr)
         self.contract.abi = self.abi
@@ -512,7 +550,9 @@ class TRC20(TokenNetwork):
         try:
             return self.contract.functions.decimals()
         except Exception as e:
-            logger.info(f"[TRC20] Error getting decimals from {self.contract_addr}, fallback to 6: {e}")
+            logger.info(
+                f"[TRC20] Error getting decimals from {self.contract_addr}, fallback to 6: {e}"
+            )
             return 6
 
     @staticmethod
@@ -525,7 +565,9 @@ class TRC20(TokenNetwork):
                 - base58check адрес кошелька,
                 - приватный ключ в hex формате.
         """
-        client = Tron(provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY")))
+        client = Tron(
+            provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY"))
+        )
         acc = client.generate_address()
         return acc["base58check_address"], acc["private_key"]
 
@@ -543,7 +585,9 @@ class TRC20(TokenNetwork):
             raw_balance = self.client.get_account_balance(addr)
             return Decimal(raw_balance)
         except Exception as e:
-            logger.warning(f"[TRC20] Error getting native TRX balance for {addr}: {e}")
+            logger.warning(
+                f"[TRC20] Error getting native TRX balance for {addr}: {e}"
+            )
             return Decimal(0)
 
     def balance(self, addr: str) -> Decimal:
@@ -577,7 +621,9 @@ class TRC20(TokenNetwork):
         """
         priv = PrivateKey(bytes.fromhex(pk))
         txn = (
-            self.contract.functions.transfer(to_addr, int(amount * (10**self._decimals)))
+            self.contract.functions.transfer(
+                to_addr, int(amount * (10**self._decimals))
+            )
             .with_owner(priv.public_key.to_base58check_address())
             .fee_limit(10_000_000)
             .build()
@@ -601,7 +647,9 @@ class TRC20(TokenNetwork):
         """
         priv = PrivateKey(bytes.fromhex(pk))
         txn = (
-            self.contract.functions.transfer(to_addr, int(amount * (10**self._decimals)))
+            self.contract.functions.transfer(
+                to_addr, int(amount * (10**self._decimals))
+            )
             .with_owner(priv.public_key.to_base58check_address())
             .fee_limit(10_000_000)
             .build()
@@ -637,7 +685,9 @@ class TRC20(TokenNetwork):
         txn = (
             self.contract.functions.transfer(to_addr, amount_raw)
             .with_owner(user_addr)
-            .fee_limit(10_000_000)  # 10 TRX в sun; подкорректируй при необходимости
+            .fee_limit(
+                10_000_000
+            )  # 10 TRX в sun; подкорректируй при необходимости
             .build()
         )
         return txn  # tronpy Transaction object
@@ -652,15 +702,25 @@ class TRC20(TokenNetwork):
     def publish_raw_tx(self, raw_tx: bytes) -> str:  # noqa: D102
         # для TRON нужно восстановить txn — если ты сохраняешь signed в базе, лучше сохранять signed.tx.serialize()
         # здесь предполагаем, что мы публикуем сразу после sign (в типовом воркфлоу)
-        raise NotImplementedError("Publish from raw requires full txn object; публикуй сразу после sign в воркере")
+        raise NotImplementedError(
+            "Publish from raw requires full txn object; публикуй сразу после sign в воркере"
+        )
 
     def estimate_native_for_tx(self, unsigned_tx) -> Decimal:  # noqa: D102, ANN001
         return Decimal(unsigned_tx.fee_limit) / Decimal(1_000_000)
 
-    def send_native(self, platform_pk: str, to_addr: str, amount_native: Decimal) -> str:  # noqa: D102
+    def send_native(
+        self, platform_pk: str, to_addr: str, amount_native: Decimal
+    ) -> str:  # noqa: D102
         priv = PrivateKey(bytes.fromhex(platform_pk))
         amount_sun = int(amount_native * Decimal(1_000_000))
-        txn = self.client.trx.transfer(priv.public_key.to_base58check_address(), to_addr, amount_sun).build().sign(priv)
+        txn = (
+            self.client.trx.transfer(
+                priv.public_key.to_base58check_address(), to_addr, amount_sun
+            )
+            .build()
+            .sign(priv)
+        )
         res = txn.broadcast()
         if not res.get("result"):
             raise Exception(f"TRX transfer failed: {res}")
@@ -677,7 +737,9 @@ class ProviderManager:
     _cache = {}
 
     @classmethod
-    def get(cls, network: str, contract_addr: Optional[str] = None) -> TokenNetwork:
+    def get(
+        cls, network: str, contract_addr: Optional[str] = None
+    ) -> TokenNetwork:
         """
         Получает экземпляр провайдера для указанной сети и контракта.
 
@@ -695,11 +757,11 @@ class ProviderManager:
         if key in cls._cache:
             return cls._cache[key]
 
-        if network == "ERC20":
+        if network == "erc20":
             cls._cache[key] = ERC20(contract_addr)
-        elif network == "BEP20":
+        elif network == "bep20":
             cls._cache[key] = BEP20(contract_addr)
-        elif network == "TRC20":
+        elif network == "trc20":
             cls._cache[key] = TRC20(contract_addr)
         else:
             raise ValueError(f"Unsupported network: {network}")
