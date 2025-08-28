@@ -146,7 +146,6 @@ tokens = [
     },
 ]
 
-
 # Добавляем нативные токены газа для сетей
 native_gas_tokens = [
     {
@@ -167,15 +166,14 @@ native_gas_tokens = [
         "network": "TRC20",
         "symbol": "TRX",
         "contract_address": None,
-        "decimals": 6,  # В Tron обычно 6 десятичных
+        "decimals": 6,
         "is_native_gas": True,
     },
 ]
 
 # Папка для сохранения ABI файлов
 ABI_DIR = "abi"
-os.makedirs(ABI_DIR, exist_ok=True)  # noqa PTH103
-
+os.makedirs(ABI_DIR, exist_ok=True)
 
 def seed_tokens() -> None:
     """
@@ -183,12 +181,17 @@ def seed_tokens() -> None:
     Для каждого токена пытается получить ABI через fetch_abi и сохранить его в файл.
     Нативные токены газа не имеют ABI и contract_address.
     """
-    # Объединяем списки токенов
+    print("Запуск функции seed_tokens...")
     all_tokens = tokens + native_gas_tokens
 
+    if not all_tokens:
+        print("Список токенов пуст. Проверьте, что токены добавлены.")
+        return
+
     for t in all_tokens:
-        # Проверяем, существует ли токен с таким network и symbol
-        exists = BlockchainTokens.query.filter_by(network=t["network"], symbol=t["symbol"]).first()
+        exists = BlockchainTokens.query.filter_by(
+            network=t["network"], symbol=t["symbol"]
+        ).first()
         if exists:
             print(f"{t['network']}:{t['symbol']} уже существует, пропускаем.")
             continue
@@ -200,30 +203,30 @@ def seed_tokens() -> None:
             decimals=t.get("decimals", 18),
             is_native_gas=t.get("is_native_gas", False),
             is_active=True,
-            created_at=datetime.utcnow(),  # noqa DTZ003
+            created_at=datetime.utcnow(),
         )
         db.session.add(token)
         print(f"Добавлен токен: {t['network']}:{t['symbol']}")
 
-        # Для нативных токенов газа ABI не загружаем
         if token.is_native_gas:
             print(f"Нативный токен газа {t['symbol']} - ABI не требуется.")
             continue
 
-        # Пытаемся получить ABI и сохранить в файл
         try:
-            abi = fetch_abi(t["network"], t["contract_address"])
-            abi_path = os.path.join(ABI_DIR, f"{t['network'].lower()}_{t['symbol'].lower()}.json")  # noqa PTH118
-            with open(abi_path, "w", encoding="utf-8") as f:  # noqa PTH123
+            contract_address = t["contract_address"]
+            abi = fetch_abi(t["network"], contract_address)
+            abi_path = os.path.join(
+                ABI_DIR, f"{t['network'].lower()}_{t['symbol'].lower()}.json"
+            )
+            with open(abi_path, "w", encoding="utf-8") as f:
                 json.dump(abi, f, indent=2, ensure_ascii=False)
             print(f"ABI сохранён в {abi_path}")
-            sleep(0.5)  # Чтобы не перегружать API запросами
+            sleep(0.5)
         except Exception as e:
             print(f"Не удалось загрузить ABI для {t['network']}:{t['symbol']} - {e}")
 
     db.session.commit()
     print("Готово: Все токены (включая нативные) добавлены и ABI сохранены.")
-
 
 if __name__ == "__main__":
     app = create_app()

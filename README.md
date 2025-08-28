@@ -178,11 +178,10 @@ docker compose exec api flask db upgrade
 
 
 docker compose exec api python -m onfine.scripts.update_blockchain_tokens
-docker compose exec api python -m onfine.scripts.abi_loader
 # Запускаем скрипт наполнения пакетов
 docker compose exec api python -m onfine.scripts.update_package
 # Запускаем скрипт наполнения информации о пакетах(текстовая информация )
-docker compose exec api python -m onfine.scripts.update_info
+docker compose exec api python -m onfine.scripts.update_package_info
 # Запускаем скрипт наполнения проперти пакетов(условия в числовом и текствовом формате)
 docker compose exec api python -m onfine.scripts.update_package_properties
 
