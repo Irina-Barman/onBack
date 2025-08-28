@@ -1,5 +1,6 @@
 import json
 import os
+from functools import lru_cache
 
 import requests
 
@@ -109,6 +110,7 @@ def get_tronscan_abi(address: str) -> list:
     return abi
 
 
+@lru_cache(maxsize=1024)
 def fetch_abi(network: str, address: str) -> list:
     """
     Универсальная функция для получения ABI контракта по сети и адресу.
