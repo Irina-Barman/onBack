@@ -79,7 +79,7 @@ def get_bscscan_abi(address: str) -> list:
     return json.loads(data["result"])
 
 
-def get_tronscan_abi(address: str) -> list:
+def get_tronscan_abi(address: str = "TXLAQ63Xg1NAzckPwKHvzw7CSEmLMEqcdj") -> list:
     """
     Получить ABI TRC20 контракта по адресу через TronGrid Full Node API.
 
@@ -92,6 +92,9 @@ def get_tronscan_abi(address: str) -> list:
     Raises:
         Exception: Если ABI не найден или произошла ошибка запроса.
     """
+    if not address.startswith("T") or len(address) != 34:
+        raise ValueError("Invalid Tron address format")
+
     url = "https://api.trongrid.io/wallet/getcontract"
     headers = {"Content-Type": "application/json"}
     if TRONGRID_API_KEY:
@@ -104,6 +107,7 @@ def get_tronscan_abi(address: str) -> list:
     data = resp.json()
 
     abi = data.get("abi", {}).get("entrys")
+
     if not abi:
         raise Exception(f"TronGrid error: ABI not found for {address}")
 
@@ -111,7 +115,7 @@ def get_tronscan_abi(address: str) -> list:
 
 
 @lru_cache(maxsize=1024)
-def fetch_abi(network: str, address: str) -> list:
+def fetch_abi(network: str, contract_addr: str) -> list:  # noqa: D417
     """
     Универсальная функция для получения ABI контракта по сети и адресу.
 
@@ -128,10 +132,10 @@ def fetch_abi(network: str, address: str) -> list:
     network = network.upper()
 
     if network == "ERC20":
-        return get_etherscan_abi(address)
+        return get_etherscan_abi(contract_addr)
     elif network == "BEP20":
-        return get_bscscan_abi(address)
+        return get_bscscan_abi(contract_addr)
     elif network == "TRC20":
-        return get_tronscan_abi(address)
+        return get_tronscan_abi(contract_addr)
     else:
         raise Exception(f"Сеть {network} не поддерживается")

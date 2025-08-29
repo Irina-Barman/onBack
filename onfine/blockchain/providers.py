@@ -690,6 +690,7 @@ class ProviderManager:
         Returns:
             TokenNetwork: Экземпляр провайдера токена.
         """
+        network = network.upper()
         key = (network, contract_addr)
         if key in cls._cache:
             return cls._cache[key]

@@ -118,7 +118,7 @@ def _gen_addr_pk(network: str) -> Tuple[str, str]:
     Returns:
         Tuple[str, str]: Кортеж (адрес, незашифрованный приватный ключ).
     """
-    provider = ProviderManager.get(network.lower())
+    provider = ProviderManager.get(network)
     return provider.generate_wallet()
 
 
@@ -199,7 +199,7 @@ def get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]:
     if not blockchain_tokens:
         return {}
 
-    provider = ProviderManager.get(network.lower())
+    provider = ProviderManager.get(network)
     balances: Dict[str, Decimal] = {}
 
     def _normalize(raw: int | str, decimals: int) -> Decimal:
@@ -281,7 +281,7 @@ def get_blockchain_token_balance(
     Returns:
         Decimal: Баланс токена.
     """
-    provider = ProviderManager.get(network=network.lower(), contract_addr=token_contract_address)
+    provider = ProviderManager.get(network=network, contract_addr=token_contract_address)
     if not token_contract_address:
         return provider.balance_native(user_address)
 
