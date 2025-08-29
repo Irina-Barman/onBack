@@ -4,9 +4,9 @@ from datetime import datetime
 from time import sleep
 
 from onfine.app_factory import create_app
+from onfine.blockchain.abi_loader import fetch_abi
 from onfine.extensions import db
 from onfine.models.blockchain_tokens import BlockchainTokens
-from onfine.scripts.abi_loader import fetch_abi
 
 tokens = [
     # ERC20

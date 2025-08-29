@@ -9,8 +9,7 @@ from tronpy.providers import HTTPProvider
 from web3 import Web3
 from web3.types import TxParams
 
-# Твой класс Wallet из БД
-from onfine.blockchain.token_abi_loder import get_token_abi
+from onfine.blockchain.abi_loader import fetch_abi
 
 logger = logging.getLogger(__name__)
 
@@ -132,15 +131,9 @@ class ERC20(TokenNetwork):
         """
         self.network = "ERC20"
         self.w3 = self._w3()
-        self.contract_addr = Web3.to_checksum_address(
-            contract_addr or os.getenv("USDT_ERC_CONTRACT_ADDR")
-        )
-        self.abi = get_token_abi(
-            network=self.network, contract_addr=self.contract_addr
-        )
-        self.contract = self.w3.eth.contract(
-            address=self.contract_addr, abi=self.abi
-        )
+        self.contract_addr = Web3.to_checksum_address(contract_addr or os.getenv("USDT_ERC_CONTRACT_ADDR"))
+        self.abi = fetch_abi(network=self.network, contract_addr=self.contract_addr)
+        self.contract = self.w3.eth.contract(address=self.contract_addr, abi=self.abi)
         self._decimals = self._get_decimals()
 
     @staticmethod
@@ -426,15 +419,9 @@ class BEP20(ERC20):
         """
         self.network = "BEP20"
         self.w3 = self._w3()
-        self.contract_addr = Web3.to_checksum_address(
-            contract_addr or os.getenv("USDT_BEP_CONTRACT_ADDR")
-        )
-        self.abi = get_token_abi(
-            network=self.network, contract_addr=self.contract_addr
-        )
-        self.contract = self.w3.eth.contract(
-            address=self.contract_addr, abi=self.abi
-        )
+        self.contract_addr = Web3.to_checksum_address(contract_addr or os.getenv("USDT_BEP_CONTRACT_ADDR"))
+        self.abi = fetch_abi(network=self.network, contract_addr=self.contract_addr)
+        self.contract = self.w3.eth.contract(address=self.contract_addr, abi=self.abi)
         self._decimals = self._get_decimals()
 
     @staticmethod
@@ -532,10 +519,8 @@ class TRC20(TokenNetwork):
             provider=HTTPProvider(api_key=os.getenv("TRONGRID_API_KEY"))
         )
         self.network = "TRC20"
-        self.contract_addr = contract_addr or os.getenv(
-            "USDT_TRC_CONTRACT_ADDR"
-        )
-        self.abi = get_token_abi(self.network, self.contract_addr)
+        self.contract_addr = contract_addr or os.getenv("USDT_TRC_CONTRACT_ADDR")
+        self.abi = fetch_abi(self.network, self.contract_addr)
         self.contract = self.client.get_contract(self.contract_addr)
         self.contract.abi = self.abi
         self._decimals = self._get_decimals()
