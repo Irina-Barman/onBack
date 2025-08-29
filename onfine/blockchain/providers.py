@@ -695,11 +695,11 @@ class ProviderManager:
         if key in cls._cache:
             return cls._cache[key]
 
-        if network == "ERC20":
+        if network == "erc20":
             cls._cache[key] = ERC20(contract_addr)
-        elif network == "BEP20":
+        elif network == "bep20":
             cls._cache[key] = BEP20(contract_addr)
-        elif network == "TRC20":
+        elif network == "trc20":
             cls._cache[key] = TRC20(contract_addr)
         else:
             raise ValueError(f"Unsupported network: {network}")
