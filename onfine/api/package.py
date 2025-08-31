@@ -117,20 +117,6 @@ class PackageList(Resource):
         return {"items": packages}
 
 
-# ---------- /packages/gas ----------
-@ns.route("/gas")
-class Gas(Resource):
-    @ns.marshal_with(_gas)
-    def get(self) -> Dict[str, str]:
-        """
-        Получает информацию о газовых сетях.
-
-        Returns:
-            dict: Словарь с информацией о газовых сетях.
-        """
-        return {k: str(v) for k, v in svc.gas_table().items()}
-
-
 # ---------- /purchases ----------
 @ns.route("/purchases")
 class Purchase(Resource):

@@ -22,7 +22,6 @@ from ..models.package import Package
 from ..models.purchase import Purchase, PurchaseStatus
 from ..models.transactions import Transaction
 from ..models.user import User
-from ..services import wallet_service as wsvc
 from ..utils import kafka_producer as kfk
 
 logger = logging.getLogger(__name__)
@@ -131,31 +130,6 @@ def reset_gas_table_cache() -> None:
     logger.info("Кэш таблицы газовых цен сброшен.")
 
 
-def check_balance(user: User, network: str, amount: Decimal) -> None:
-    """
-    Проверяет, что у пользователя достаточно средств на указанной сети.
-
-    Args:
-        user (User): Пользователь, чей баланс проверяется.
-        network (str): Название сети (например, 'ERC20', 'BEP20').
-        amount (Decimal): Необходимая сумма для проверки.
-
-    Exceptions:
-        InsufficientBalanceError: Если баланс пользователя меньше требуемой суммы.
-    """
-    try:
-        balance = wsvc.balance_for(user, network)
-        if balance < amount:
-            logger.warning(
-                f"Недостаточно средств у пользователя {user.id} на сети {network}: "
-                f"требуется {amount}, доступно {balance}",
-            )
-            raise InsufficientBalanceError("Insufficient balance for the purchase")
-    except Exception as e:
-        logger.error(f"Ошибка при проверке баланса: {e}")
-        raise
-
-
 def check_or_create_purchase(user: User, package_id: int, network: str) -> PurchaseResult:
     """
     Проверяет наличие ожидающей покупки или создает новую.
@@ -187,13 +161,16 @@ def check_or_create_purchase(user: User, package_id: int, network: str) -> Purch
         logger.error(f"Пакет с id {package_id} не найден")
         raise PackageNotFoundError(f"Package with id {package_id} not found")
 
-    fee = gas_table().get(network)
-    if fee is None:
-        logger.error(f"Сеть {network} не найдена в таблице газовых цен")
-        raise NetworkNotFoundError(f"Network {network} not found")
+    # fee = gas_table().get(network)
+    # if fee is None:
+    #     logger.error(f"Сеть {network} не найдена в таблице газовых цен")
+    #     raise NetworkNotFoundError(f"Network {network} not found")
 
-    total = pkg.price_usdt + fee
-    check_balance(user, network, total)
+    # total = pkg.price_usdt + fee
+
+    # ТУТ ДОЛЖЕН БЫТЬ МЕХАНИЗМ ПРОВЕРКИ БАЛАНСА В РАНТАЙМЕ
+
+    # check_balance(user, network, total)
 
     new_purchase = create_purchase(user, pkg, network)
     return {"purchase": new_purchase, "from_database": False}
@@ -215,6 +192,7 @@ def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
         Purchase: Созданный объект покупки.
     """
     fee = gas_table().get(network)
+    # ПОЛУЧЕНИЕ И РАССЧЕТ ЦЕНЫ ГАЗА ИЗ РАНТАЙМА + МОЖНО В КОРОТКИЙ КЭШ ПИХНУТЬ НА БУДУЩЕЕ
     if fee is None:
         logger.error(f"Сеть {network} не найдена в таблице газовых цен при создании покупки")
         raise NetworkNotFoundError(f"Network {network} not found")
@@ -257,6 +235,9 @@ def process_purchase_confirmation(purchase_id: int, success: bool) -> Purchase:
     if success:
         if p.status != PurchaseStatus.pending:
             raise ValueError(f"Purchase {purchase_id} status is not pending, current status: {p.status}")
+
+        # ВОТ ТУТ УЖЕ БЛОКИРУЕМ СЧЕТ ПОЛЬЗОВАТЕЛЯ ЧТОБЫ НАС НЕ ЗАСКАМИЛИ НА ГАЗ
+        #
 
         # Создаем транзакцию для покупки
         t = Transaction(
@@ -306,7 +287,7 @@ def process_purchase_confirmation(purchase_id: int, success: bool) -> Purchase:
     return p
 
 
-def send_kafka_event(purchase: Purchase, success: bool) -> None:
+def send_purchase_event_to_kafka(purchase: Purchase, success: bool) -> None:
     """
     Отправляет событие в Kafka о завершении покупки.
 
@@ -327,6 +308,7 @@ def send_kafka_event(purchase: Purchase, success: bool) -> None:
                 "purchase_id": purchase.id,
                 "user_id": purchase.user_id,
                 "amount": str(purchase.amount_usdt),
+                # ТУТ НУЖНО ДОБАВИТЬ ПОЛУЧИВШУЮСЯ СТОИМОСТЬ ПАКЕТА ПОСЛЕ ВЫЧЕТА ГАЗА
                 "partner_uid": getattr(purchase.user, "partner_uid", None),
                 "network": purchase.network,
                 "program_type": 1,

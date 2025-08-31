@@ -6,12 +6,8 @@ import requests
 
 ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
 TRONGRID_API_KEY = os.getenv("TRONGRID_API_KEY")
-ETHERSCAN_BASE_URL = os.getenv(
-    "ETHERSCAN_BASE_URL", "https://api.etherscan.io/api"
-)
-TRONGRID_CONTRACT_API_URL = os.getenv(
-    "TRONGRID_CONTRACT_API_URL", "https://api.trongrid.io/wallet/getcontract"
-)
+ETHERSCAN_BASE_URL = os.getenv("ETHERSCAN_BASE_URL", "https://api.etherscan.io/api")
+TRONGRID_CONTRACT_API_URL = os.getenv("TRONGRID_CONTRACT_API_URL", "https://api.trongrid.io/wallet/getcontract")
 
 SUPPORTED_CHAINS = {"ERC20": "eth", "BEP20": "bsc", "TRC20": "tron"}
 
@@ -37,9 +33,7 @@ def get_token_abi(network: str, contract_addr: str) -> List[dict]:
         raise ValueError(f"[ABI] Unsupported network: {network}")
 
 
-def fetch_etherscan_multichain_abi(
-    chain: str, contract_addr: str
-) -> List[dict]:
+def fetch_etherscan_multichain_abi(chain: str, contract_addr: str) -> List[dict]:
     """
     Получить ABI токена из Etherscan Multichain API.
 
@@ -54,26 +48,19 @@ def fetch_etherscan_multichain_abi(
         List[dict]: ABI контракта, представленное списком описаний функций и событий.
 
     Raises:
-        ValueError: Если произошла ошибка HTTP запроса, 
+        ValueError: Если произошла ошибка HTTP запроса,
                     или структура возвращаемых данных не соответствует ожиданиям.
 
     Пример:
         abi = fetch_etherscan_multichain_abi("eth", "0x6b175474e89094c44da98b954eedeac495271d0f")
     """
-    params = {
-        "chain": chain,
-        "address": contract_addr,
-        "apikey": ETHERSCAN_API_KEY
-    }
-    response = requests.get(
-        f"{ETHERSCAN_BASE_URL}/contracts/abi", params=params, timeout=15)
+    params = {"chain": chain, "address": contract_addr, "apikey": ETHERSCAN_API_KEY}
+    response = requests.get(f"{ETHERSCAN_BASE_URL}/contracts/abi", params=params, timeout=15)
     response.raise_for_status()
     data = response.json()
     abi = data.get("data")
     if not abi or not isinstance(abi, list):
-        raise ValueError(
-            f"[ABI] Invalid ABI response for {chain}:{contract_addr} → {data}"
-        )
+        raise ValueError(f"[ABI] Invalid ABI response for {chain}:{contract_addr} → {data}")
     return abi
 
 
@@ -96,15 +83,10 @@ def fetch_trongrid_abi(contract_addr: str) -> List[dict]:
         "visible": True,
     }
 
-    print(f"Отправка запроса ABI для TRON адреса: {contract_addr}")
+    print(f"Отправка запроса ABI для TRON адреса: {contract_addr}")  # noqa: T201
 
     try:
-        response = requests.post(
-            TRONGRID_CONTRACT_API_URL,
-            json=payload,
-            headers=headers,
-            timeout=30
-        )
+        response = requests.post(TRONGRID_CONTRACT_API_URL, json=payload, headers=headers, timeout=30)
         response.raise_for_status()
 
         data = response.json()
@@ -122,8 +104,7 @@ def fetch_trongrid_abi(contract_addr: str) -> List[dict]:
             # Проверяем если ABI доступен напрямую в ответе
             if isinstance(data.get("abi"), list):
                 return data["abi"]
-            raise ValueError(
-                f"[TRON] ABI not found for {contract_addr}: {data}")
+            raise ValueError(f"[TRON] ABI not found for {contract_addr}: {data}")
 
         return abi_data
 
