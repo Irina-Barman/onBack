@@ -26,6 +26,7 @@ from decimal import Decimal
 from typing import Optional
 
 from kafka import KafkaConsumer
+from services.locks import extend_wallet_lock
 
 from onfine.blockchain.providers import ProviderManager
 from onfine.extensions import db
@@ -134,6 +135,17 @@ class GasTopupWorker:
         if not purchase:
             logger.warning("Purchase %s not found", p_id)
             return
+        expense: Optional[PlatformGasExpense] = None
+
+        if getattr(purchase, "wallet_lock_id", None) and getattr(purchase, "wallet_lock_token", None):
+            try:
+                # продлеваем на ещё 15 минут (под EVM); под TRON можно меньше
+                extend_wallet_lock(purchase.wallet_lock_id, purchase.wallet_lock_token, extend_seconds=900)
+                db.session.commit()
+            except Exception as e:
+                logger.warning("Failed to refresh wallet lock for purchase %s: %s", p_id, e)
+        else:
+            logger.warning("No wallet lock bound to purchase %s (continuing, but withdrawals may be allowed)", p_id)
 
         expense: Optional[PlatformGasExpense] = None
         if getattr(purchase, "gas_topup_expense_id", None):
@@ -142,28 +154,30 @@ class GasTopupWorker:
             logger.warning("PlatformGasExpense not found for purchase %s", p_id)
             return
 
-        # идемпотентность: уже отправлен/подтверждён?
         if expense.status in (GasExpenseStatus.sent, GasExpenseStatus.confirmed):
             logger.info("Expense already %s for purchase %s; skip send", expense.status, p_id)
-            # но на всякий случай прогоняем confirm-воркер (если есть tx_hash)
             if expense.platform_tx_hash:
                 self._emit_confirm(p_id, network, expense.platform_tx_hash)
             return
 
-        # провайдер сети
         provider = ProviderManager.get(network, contract_addr=purchase.usdt_token_contract)
 
-        # отправляем нативный газ на адрес пользователя
         tx_hash = provider.send_native(platform_pk, wallet_address, amount_native)
         logger.info("[GAS TOPUP] net=%s to=%s amount=%s tx=%s", network, wallet_address, amount_native, tx_hash)
 
-        # обновляем статусы
         expense.status = GasExpenseStatus.sent
         expense.platform_tx_hash = tx_hash
         purchase.step = PurchaseStep.gas_sent
         db.session.commit()
 
-        # публикуем событие подтверждения (пусть отдельный воркер ждёт receipt)
+        # --- СРАЗУ ПОСЛЕ ОТПРАВКИ: снова продлеваем лок (на случай длинного майнинга)
+        if getattr(purchase, "wallet_lock_id", None) and getattr(purchase, "wallet_lock_token", None):
+            try:
+                extend_wallet_lock(purchase.wallet_lock_id, purchase.wallet_lock_token, extend_seconds=900)
+                db.session.commit()
+            except Exception as e:
+                logger.warning("Post-send refresh lock failed for purchase %s: %s", p_id, e)
+
         self._emit_confirm(p_id, network, tx_hash)
 
     # --------------- вспомогательное ---------------

@@ -34,6 +34,7 @@ from decimal import Decimal
 from typing import Optional
 
 from kafka import KafkaConsumer
+from services.locks import extend_wallet_lock, release_wallet_lock
 from web3.exceptions import TransactionNotFound
 
 from onfine.blockchain.providers import ProviderManager
@@ -88,12 +89,9 @@ class GasConfirmWorker:
     # ---------------- utils: ожидание receipt ----------------
 
     @classmethod
-    def _wait_evm_receipt(cls, w3, tx_hash: str, timeout_sec: int) -> bool:  # noqa: ANN001
-        """
-        Ждёт подтверждение EVM-транзакции до timeout.
-        Возвращает True, если receipt получен и status == 1.
-        """
+    def _wait_evm_receipt(cls, w3, tx_hash: str, timeout_sec: int, on_tick=None) -> bool:  # noqa: ANN001, ANN001
         start = time.time()
+        tick = 0
         while time.time() - start < timeout_sec:
             try:
                 r = w3.eth.get_transaction_receipt(tx_hash)
@@ -107,16 +105,21 @@ class GasConfirmWorker:
                 pass
             except Exception as e:
                 logger.debug("evm receipt waiting error: %s", e)
+
+            tick += 1
+            if on_tick and tick % 6 == 0:  # раз в ~30 сек (6 * POLL_INTERVAL_SEC(=5))
+                try:
+                    on_tick()
+                except Exception as _e:
+                    logger.debug("on_tick error: %s", _e)
+
             time.sleep(cls.POLL_INTERVAL_SEC)
         return False
 
     @classmethod
-    def _wait_tron_confirm(cls, tron_client, txid: str, timeout_sec: int) -> bool:  # noqa: ANN001
-        """
-        Ждёт подтверждение транзакции TRON (появление в блоке).
-        Возвращает True при подтверждении.
-        """
+    def _wait_tron_confirm(cls, tron_client, txid: str, timeout_sec: int, on_tick: bool = None) -> bool:  # noqa: ANN001
         start = time.time()
+        tick = 0
         while time.time() - start < timeout_sec:
             try:
                 info = tron_client.get_transaction_info(txid)
@@ -124,6 +127,14 @@ class GasConfirmWorker:
                     return True
             except Exception as e:
                 logger.debug("tron receipt waiting error: %s", e)
+
+            tick += 1
+            if on_tick and tick % 6 == 0:  # раз в ~30 сек
+                try:
+                    on_tick()
+                except Exception as _e:
+                    logger.debug("on_tick error: %s", _e)
+
             time.sleep(cls.POLL_INTERVAL_SEC)
         return False
 
@@ -158,9 +169,19 @@ class GasConfirmWorker:
         # --- 1) подтверждаем топап газа ---
         logger.info("[CONFIRM] waiting gas topup receipt p=%s net=%s tx=%s", p_id, net, exp.platform_tx_hash)
         if net in ("ERC20", "BEP20"):
-            gas_ok = self._wait_evm_receipt(provider.w3, exp.platform_tx_hash, self.GAS_RECEIPT_TIMEOUT_SEC)
+            gas_ok = self._wait_evm_receipt(
+                provider.w3,
+                exp.platform_tx_hash,
+                self.GAS_RECEIPT_TIMEOUT_SEC,
+                on_tick=lambda: self._try_refresh_lock(purchase, 900),
+            )
         else:
-            gas_ok = self._wait_tron_confirm(provider.client, exp.platform_tx_hash, self.GAS_RECEIPT_TIMEOUT_SEC)
+            gas_ok = self._wait_tron_confirm(
+                provider.client,
+                exp.platform_tx_hash,
+                self.GAS_RECEIPT_TIMEOUT_SEC,
+                on_tick=lambda: self._try_refresh_lock(purchase, 600),
+            )
 
         if not gas_ok:
             logger.error("Gas topup not confirmed in time; purchase=%s", p_id)
@@ -184,7 +205,12 @@ class GasConfirmWorker:
                 return
 
             logger.info("[CONFIRM] waiting user USDT tx p=%s tx=%s", p_id, purchase.user_tx_hash)
-            ok = self._wait_evm_receipt(provider.w3, purchase.user_tx_hash, self.USER_TX_TIMEOUT_SEC)
+            ok = self._wait_evm_receipt(
+                provider.w3,
+                purchase.user_tx_hash,
+                self.USER_TX_TIMEOUT_SEC,
+                on_tick=lambda: self._try_refresh_lock(purchase, 900),
+            )
             if not ok:
                 logger.error("USDT tx not confirmed in time; p=%s tx=%s", p_id, purchase.user_tx_hash)
                 return
@@ -193,6 +219,7 @@ class GasConfirmWorker:
             purchase.status = PurchaseStatus.completed
             purchase.confirmed_at = datetime.utcnow()  # noqa: DTZ003
             db.session.commit()
+            self._try_release_lock(purchase)
             logger.info("[PURCHASE COMPLETED] p=%s net=%s tx=%s", p_id, net, purchase.user_tx_hash)
             return
 
@@ -206,7 +233,12 @@ class GasConfirmWorker:
             logger.error("TRON transfer error p=%s: %s", p_id, e)
             return
 
-        ok = self._wait_tron_confirm(provider.client, txid, self.USER_TX_TIMEOUT_SEC)
+        ok = self._wait_tron_confirm(
+            provider.client,
+            txid,
+            self.USER_TX_TIMEOUT_SEC,
+            on_tick=lambda: self._try_refresh_lock(purchase, 600),
+        )
         if not ok:
             logger.error("TRON USDT tx not confirmed in time p=%s tx=%s", p_id, txid)
             return
@@ -216,7 +248,43 @@ class GasConfirmWorker:
         purchase.status = PurchaseStatus.completed
         purchase.confirmed_at = datetime.utcnow()  # noqa: DTZ003
         db.session.commit()
+        self._try_release_lock(purchase)
         logger.info("[PURCHASE COMPLETED] p=%s net=%s tx=%s", p_id, net, txid)
+
+    @classmethod
+    def _try_refresh_lock(purchase: Purchase, extend_sec: int = 900) -> None:
+        """
+        Пытается продлить TTL долгого лока, если он привязан к покупке.
+        Не бросает исключения — только логирует.
+        """
+        lock_id = getattr(purchase, "wallet_lock_id", None)
+        lock_token = getattr(purchase, "wallet_lock_token", None)
+        if not lock_id or not lock_token:
+            logger.debug("No wallet lock bound to purchase %s; skip refresh", purchase.id)
+            return
+        try:
+            extend_wallet_lock(lock_id, lock_token, extend_sec)
+            db.session.commit()
+            logger.debug("Lock refreshed for purchase %s (+%ss)", purchase.id, extend_sec)
+        except Exception as e:
+            logger.warning("Failed to refresh lock for purchase %s: %s", purchase.id, e)
+
+    @classmethod
+    def _try_release_lock(purchase: Purchase) -> None:
+        """
+        Пытается снять долгий лок, если он привязан к покупке.
+        Не бросает исключения — только логирует.
+        """
+        lock_id = getattr(purchase, "wallet_lock_id", None)
+        lock_token = getattr(purchase, "wallet_lock_token", None)
+        if not lock_id or not lock_token:
+            return
+        try:
+            release_wallet_lock(lock_id, lock_token, comment=f"purchase {purchase.id} finished")
+            db.session.commit()
+            logger.info("Lock released for purchase %s", purchase.id)
+        except Exception as e:
+            logger.error("Failed to release lock for purchase %s: %s", purchase.id, e)
 
     # ---------------- цикл консюмера ----------------
 
