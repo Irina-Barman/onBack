@@ -13,10 +13,9 @@ from ..api.error_handlers import (
 
 logger = logging.getLogger(__name__)
 
-# Создаём пространство имён API для кошельков с описанием
+# Создаём пространство имён API для токенов пользователя
 ns = Namespace("tokens", description="Управление токенами пользователя")
 register_error_handlers(ns)
-
 
 VALID_NETWORKS = ("erc20", "bep20", "trc20")
 
@@ -28,8 +27,7 @@ err_model = ns.model(
     },
 )
 
-
-# Модели для управления токенами пользователя
+# Модель одного токена
 blockchain_token_out = ns.model(
     "BlockchainTokenOut",
     {
@@ -37,6 +35,14 @@ blockchain_token_out = ns.model(
         "symbol": fields.String(description="Символ токена"),
         "contract_address": fields.String(description="Адрес контракта токена"),
         "tracked": fields.Boolean(description="Отслеживается ли токен пользователем"),
+    },
+)
+
+# Модель-обёртка списка токенов с ключом "tokens"
+blockchain_tokens_list_out = ns.model(
+    "BlockchainTokensListOut",
+    {
+        "tokens": fields.List(fields.Nested(blockchain_token_out), description="Список токенов"),
     },
 )
 
@@ -70,16 +76,13 @@ class BlockchainTokensList(Resource):
     """
 
     @jwt_required()
-    @ns.marshal_list_with(blockchain_token_out)
-    def get(self, network: str) -> List[Dict[str, Any]]:
+    @ns.marshal_with(blockchain_tokens_list_out)
+    def get(self, network: str) -> Dict[str, List[Dict[str, Any]]]:
         """
         Получить список токенов в сети с отметкой отслеживаемых пользователем.
 
-        Args:
-            network (str): Название сети.
-
         Returns:
-            List[Dict[str, Any]]: Список токенов с полями id, symbol, contract_address, tracked.
+            dict: {"tokens": [...список токенов...]} с полями id, symbol, contract_address, tracked.
 
         Raises:
             400: Если сеть не поддерживается.
@@ -91,13 +94,13 @@ class BlockchainTokensList(Resource):
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            ns.abort(404, "User not found")
+            ns.abort(404, "User  not found")
 
         all_tokens = svc.get_all_active_blockchain_tokens(network)
         tracked_tokens = svc.get_tracked_blockchain_tokens(user, network)
         tracked_ids = {t.id for t in tracked_tokens}
 
-        return [
+        tokens = [
             {
                 "id": token.id,
                 "symbol": token.symbol,
@@ -107,31 +110,32 @@ class BlockchainTokensList(Resource):
             for token in all_tokens
         ]
 
+        return {"tokens": tokens}
+
 
 @ns.route("/tokens/add")
 class TokensAdd(Resource):
     """
     Добавление токена в список отслеживаемых пользователем.
-
     """
 
     @jwt_required()
     @ns.expect(add_blockchain_token_in)
-    def post(self) -> Dict[str, Any] | int:
+    def post(self) -> tuple[Dict[str, Any], int]:
         """
         Добавить токен в отслеживаемые текущим пользователем.
 
         Returns:
-            Tuple[Dict[str, Any], int]: Сообщение об успешном добавлении и HTTP статус 201.
+            dict, int: Сообщение об успешном добавлении и HTTP статус 201.
 
         Raises:
-            400: При отсутствии blockchain_token_id или ошибках сервиса.
-            404: Если пользователь не найден.
+            400 - при отсутствии blockchain_token_id или ошибках сервиса,
+            404 - если пользователь не найден.
         """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            ns.abort(404, "User not found")
+            ns.abort(404, "User  not found")
 
         blockchain_token_id = ns.payload.get("blockchain_token_id")
         if not blockchain_token_id:
@@ -156,33 +160,22 @@ class TokensRemove(Resource):
 
     @jwt_required()
     @ns.expect(remove_blockchain_token_in)
-    def delete(self) -> tuple[dict, int]:
+    def delete(self) -> tuple[Dict[str, Any], int]:
         """
         Удаляет токен из списка отслеживаемых текущим пользователем.
 
-        Метод требует JWT-авторизацию.
-
-        Args:
-            В теле запроса (JSON) должен присутствовать параметр:
-                blockchain_token_id (str): Идентификатор токена в блокчейне.
+        Returns:
+            dict, int: Подтверждение удаления и HTTP статус 200.
 
         Raises:
-            400: Если параметр blockchain_token_id отсутствует в запросе.
-            404: Если пользователь не найден или токен не найден в списке отслеживаемых.
-            500: При ошибках удаления токена.
-
-        Returns:
-            dict: JSON с подтверждением удаления и идентификатором удалённого токена, например:
-                {
-                    "message": "Token removed",
-                    "blockchain_token_id": "<id_токена>"
-                }
-            HTTP статус 200 при успешном удалении.
+            400 - если blockchain_token_id отсутствует,
+            404 - если пользователь или токен не найден,
+            500 - при ошибках удаления.
         """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            ns.abort(404, "User not found")
+            ns.abort(404, "User  not found")
 
         blockchain_token_id = ns.payload.get("blockchain_token_id")
         if not blockchain_token_id:
@@ -195,7 +188,8 @@ class TokensRemove(Resource):
         except Exception as e:
             ns.abort(500, f"Failed to remove token: {e}")
 
-        logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
+        logger.info(
+            f"User  {user.id} removed token {blockchain_token_id} from tracked")
         return {
             "message": "Token removed",
             "blockchain_token_id": blockchain_token_id,

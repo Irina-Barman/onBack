@@ -48,9 +48,7 @@ _wallets = ns.model(
     "WalletList",
     {
         "erc20": fields.String(description="Адрес кошелька Ethereum"),
-        "bep20": fields.String(
-            description="Адрес кошелька Binance Smart Chain"
-        ),
+        "bep20": fields.String(description="Адрес кошелька Binance Smart Chain"),
         "trc20": fields.String(description="Адрес кошелька Tron"),
     },
 )
@@ -74,9 +72,7 @@ _fee = ns.model(
     "Fee",
     {
         "ethereum": fields.String(description="Комиссия Ethereum (USDT)"),
-        "bsc": fields.String(
-            description="Комиссия Binance Smart Chain (USDT)"
-        ),
+        "bsc": fields.String(description="Комиссия Binance Smart Chain (USDT)"),
         "tron": fields.String(description="Комиссия Tron (USDT)"),
     },
 )
@@ -90,9 +86,7 @@ _withdraw_in = ns.model(
             enum=VALID_NETWORKS,
             description="Сеть для вывода",
         ),
-        "amount": fields.String(
-            required=True, example="50.00", description="Сумма вывода"
-        ),
+        "amount": fields.String(required=True, example="50.00", description="Сумма вывода"),
         "destination": fields.String(
             required=True,
             example="0x… / TA… / bnb…",
@@ -120,9 +114,7 @@ _balance_out = ns.model(
     "BalanceOut",
     {
         "erc20": fields.String(description="Баланс Ethereum (ETH и токены)"),
-        "bep20": fields.String(
-            description="Баланс Binance Smart Chain (BNB и токены)"
-        ),
+        "bep20": fields.String(description="Баланс Binance Smart Chain (BNB и токены)"),
         "trc20": fields.String(description="Баланс Tron (TRX и токены)"),
     },
 )
@@ -135,30 +127,23 @@ _tx = ns.model(
         "amount": fields.String(description="Сумма"),
         "network": fields.String(description="Сеть"),
         "status": fields.String(description="Статус транзакции"),
-        "timestamp": fields.DateTime(
-            attribute="created_at", description="Время создания"
-        ),
+        "timestamp": fields.DateTime(attribute="created_at", description="Время создания"),
     },
 )
 
 # Модель для проверки адреса кошелька
 _check_in = ns.model(
     "CheckWalletIn",
-    {
-        "wallet_address": fields.String(
-            required=True, description="Адрес кошелька для проверки"
-        )
-    },
+    {"wallet_address": fields.String(
+        required=True, description="Адрес кошелька для проверки")},
 )
 
 _check_out = ns.model(
-    "CheckWalletOut", {"status": fields.String(description="Статус проверки")}
-)
+    "CheckWalletOut", {"status": fields.String(description="Статус проверки")})
 
 # Модель баланса рефералов
 _ref_bal = ns.model(
-    "RefBalance", {"balance": fields.String(description="Баланс рефералов")}
-)
+    "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 
 # Модель запроса на вывод с реферального баланса
 _ref_wd = ns.model(
@@ -178,12 +163,8 @@ blockchain_token_out = ns.model(
     {
         "id": fields.Integer(description="ID токена"),
         "symbol": fields.String(description="Символ токена"),
-        "contract_address": fields.String(
-            description="Адрес контракта токена"
-        ),
-        "tracked": fields.Boolean(
-            description="Отслеживается ли токен пользователем"
-        ),
+        "contract_address": fields.String(description="Адрес контракта токена"),
+        "tracked": fields.Boolean(description="Отслеживается ли токен пользователем"),
     },
 )
 
@@ -198,18 +179,14 @@ balance_out = ns.model(
 add_blockchain_token_in = ns.model(
     "AddBlockchainTokenIn",
     {
-        "blockchain_token_id": fields.Integer(
-            required=True, description="ID токена для добавления"
-        ),
+        "blockchain_token_id": fields.Integer(required=True, description="ID токена для добавления"),
     },
 )
 
 remove_blockchain_token_in = ns.model(
     "RemoveBlockchainTokenIn",
     {
-        "blockchain_token_id": fields.Integer(
-            required=True, description="ID токена для удаления"
-        ),
+        "blockchain_token_id": fields.Integer(required=True, description="ID токена для удаления"),
     },
 )
 
@@ -221,33 +198,17 @@ _balance_for_purchase_out = ns.model(
     "BalanceForPurchaseOut",
     {
         "network": fields.String(description="Сеть (erc20, bep20, trc20)"),
-        "package_price_usdt": fields.String(
-            description="Стоимость пакета в USDT"
-        ),
+        "package_price_usdt": fields.String(description="Стоимость пакета в USDT"),
         "usdt_balance": fields.String(description="Баланс USDT пользователя"),
-        "has_enough_usdt": fields.Boolean(
-            description="Хватает ли USDT для пакета"
-        ),
-        "native_token": fields.String(
-            description="Нативный токен газа (ETH/BNB/TRX)"
-        ),
+        "has_enough_usdt": fields.Boolean(description="Хватает ли USDT для пакета"),
+        "native_token": fields.String(description="Нативный токен газа (ETH/BNB/TRX)"),
         "native_balance": fields.String(description="Баланс нативного токена"),
-        "estimated_gas_fee_native": fields.String(
-            description="Газ в нативном токене"
-        ),
-        "estimated_gas_fee_usdt": fields.String(
-            description="Газ в USDT-эквиваленте"
-        ),
+        "estimated_gas_fee_native": fields.String(description="Газ в нативном токене"),
+        "estimated_gas_fee_usdt": fields.String(description="Газ в USDT-эквиваленте"),
         "has_enough_gas": fields.Boolean(description="Хватает ли газа"),
-        "total_required_usdt": fields.String(
-            description="Общая сумма в USDT, если газа нет (пакет + газ)"
-        ),
-        "has_enough_total": fields.Boolean(
-            description="Хватает ли средств в целом"
-        ),
-        "shortfall_usdt": fields.String(
-            description="Сколько не хватает в USDT (если не хватает)"
-        ),
+        "total_required_usdt": fields.String(description="Общая сумма в USDT, если газа нет (пакет + газ)"),
+        "has_enough_total": fields.Boolean(description="Хватает ли средств в целом"),
+        "shortfall_usdt": fields.String(description="Сколько не хватает в USDT (если не хватает)"),
     },
 )
 
@@ -312,8 +273,7 @@ class WalletGet(Resource):
             if not res:
                 raise WalletRetrievalError("Wallets not found.")
             logger.info(
-                f"Wallet addresses retrieved for user {user.id}: {res}"
-            )
+                f"Wallet addresses retrieved for user {user.id}: {res}")
             return res
         except SQLAlchemyError as e:
             logger.error(
@@ -326,8 +286,7 @@ class WalletGet(Resource):
             raise
         except Exception as e:
             logger.error(
-                f"Failed to get wallets for user {user.id}: {e}", exc_info=True
-            )
+                f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
             raise WalletRetrievalError("Failed to get wallets.")
 
 
@@ -353,7 +312,6 @@ class CheckWallet(Resource):
         logger.info(f"Wallet check requested for address: {wallet_address}")
         # TODO: добавить реальную логику проверки безопасности адреса
         return {"status": "safe"}
-
 
 # @ns.route("/transfer-fee")
 # class TransferFee(Resource):
@@ -470,19 +428,14 @@ class TokenBalances(Resource):
 
         q = Decimal("0.000001")
         return {
-            sym: str(
-                (bal if isinstance(bal, Decimal) else Decimal(bal)).quantize(
-                    q, rounding=ROUND_DOWN
-                )
-            )
+            sym: str((bal if isinstance(bal, Decimal) else Decimal(
+                bal)).quantize(q, rounding=ROUND_DOWN))
             for sym, bal in balances.items()
         }
 
 
 @ns.route("/balance-for-purchase/<string:network>")
-@ns.param(
-    "amount", "Необходимое количество токена для покупки", required=False
-)
+@ns.param("amount", "Необходимое количество токена для покупки", required=False)
 @ns.param("token_symbol", "Символ токена (дефолтный, USDT)", required=False)
 class PurchaseBalance(Resource):
     """
@@ -532,8 +485,7 @@ class PurchaseBalance(Resource):
             raise BalanceError("Database error occurred.")
         except Exception as e:
             logger.error(
-                f"Failed to get balance for user {user.id}: {e}", exc_info=True
-            )
+                f"Failed to get balance for user {user.id}: {e}", exc_info=True)
             raise BalanceError("Failed to get balance.")
 
         try:
@@ -556,10 +508,8 @@ class PurchaseBalance(Resource):
 
         except Exception as e:
             logger.error(
-                f"Ошибка при получении баланса для покупки: {e}", exc_info=True
-            )
+                f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
             raise BalanceError("Не удалось получить баланс для покупки.")
-
 
 # @ns.route("/ready/<string:network>")
 # class WalletReadiness(Resource):
