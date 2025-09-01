@@ -10,6 +10,10 @@ from onfine.models.user_tracked_blockchain_tokens import (
     UserTrackedBlockchainToken,
 )
 
+from ..api.error_handlers import (
+    InternalServerError,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +65,9 @@ def add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockc
 
     Returns:
         UserTrackedBlockchainToken: Созданная или существующая запись об отслеживании токена.
+
+    Raises:
+        InternalServerError: При ошибках базы данных (например, commit).
     """
     existing = UserTrackedBlockchainToken.query.filter_by(
         user_id=user.id,
@@ -68,9 +75,19 @@ def add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockc
     ).first()
     if existing:
         return existing
-    tracked = UserTrackedBlockchainToken(user_id=user.id, blockchain_token_id=blockchain_token_id)
+    tracked = UserTrackedBlockchainToken(
+        user_id=user.id, blockchain_token_id=blockchain_token_id
+    )
     db.session.add(tracked)
-    db.session.commit()
+    try:
+        db.session.commit()
+        logger.info(
+            f"Token {blockchain_token_id} added to tracked for user {user.id}")
+    except Exception as e:
+        db.session.rollback()
+        logger.error(
+            f"Database error while adding tracked token for user {user.id}: {e}")
+        raise InternalServerError(f"Failed to add tracked token: {str(e)}")
     return tracked
 
 
@@ -86,7 +103,7 @@ def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
         bool: True, если удаление прошло успешно, False если токен не найден.
 
     Raises:
-        Exception: При ошибках удаления из базы данных.
+        InternalServerError: При ошибках базы данных (например, commit).
     """
     tracked = UserTrackedBlockchainToken.query.filter_by(
         user_id=user.id,
@@ -97,8 +114,11 @@ def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
     db.session.delete(tracked)
     try:
         db.session.commit()
+        logger.info(
+            f"Token {blockchain_token_id} removed from tracked for user {user.id}")
     except Exception as e:
         db.session.rollback()
-        logger.error(f"Ошибка удаления отслеживаемого токена: {e}")
-        raise
+        logger.error(
+            f"Database error while removing tracked token for user {user.id}: {e}")
+        raise InternalServerError(f"Failed to remove tracked token: {str(e)}")
     return True
