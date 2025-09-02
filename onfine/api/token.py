@@ -1,6 +1,7 @@
 import logging
 from typing import Any, Dict, List
 
+from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
@@ -8,15 +9,17 @@ from onfine.models.user import User
 from onfine.services import token_service as svc
 
 from ..api.error_handlers import (
+    InternalServerError,
+    TrackedTokenNotFoundError,
+    UserNotFoundError,
     register_error_handlers,
 )
 
 logger = logging.getLogger(__name__)
 
-# Создаём пространство имён API для кошельков с описанием
+# Создаём пространство имён API для токенов пользователя
 ns = Namespace("tokens", description="Управление токенами пользователя")
 register_error_handlers(ns)
-
 
 VALID_NETWORKS = ("erc20", "bep20", "trc20")
 
@@ -28,8 +31,7 @@ err_model = ns.model(
     },
 )
 
-
-# Модели для управления токенами пользователя
+# Модель одного токена
 blockchain_token_out = ns.model(
     "BlockchainTokenOut",
     {
@@ -37,6 +39,14 @@ blockchain_token_out = ns.model(
         "symbol": fields.String(description="Символ токена"),
         "contract_address": fields.String(description="Адрес контракта токена"),
         "tracked": fields.Boolean(description="Отслеживается ли токен пользователем"),
+    },
+)
+
+# Модель-обёртка списка токенов с ключом "tokens"
+blockchain_tokens_list_out = ns.model(
+    "BlockchainTokensListOut",
+    {
+        "tokens": fields.List(fields.Nested(blockchain_token_out), description="Список токенов"),
     },
 )
 
@@ -70,34 +80,32 @@ class BlockchainTokensList(Resource):
     """
 
     @jwt_required()
-    @ns.marshal_list_with(blockchain_token_out)
-    def get(self, network: str) -> List[Dict[str, Any]]:
+    @ns.marshal_with(blockchain_tokens_list_out)
+    def get(self, network: str) -> Dict[str, List[Dict[str, Any]]]:
         """
         Получить список токенов в сети с отметкой отслеживаемых пользователем.
 
-        Args:
-            network (str): Название сети.
-
         Returns:
-            List[Dict[str, Any]]: Список токенов с полями id, symbol, contract_address, tracked.
+            dict: {"tokens": [...список токенов...]} с полями id, symbol, contract_address, tracked.
 
         Raises:
-            400: Если сеть не поддерживается.
-            404: Если пользователь не найден.
+            ValueError: Если сеть не поддерживается (400).
+            UserNotFoundError: Если пользователь не найден (404).
         """
         if network not in VALID_NETWORKS:
-            ns.abort(400, f"Unsupported network '{network}'")
+            raise ValueError(f"Unsupported network '{network}'")
 
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            ns.abort(404, "User not found")
+            logger.error(f"User with ID {user_id} not found")
+            raise UserNotFoundError()
 
         all_tokens = svc.get_all_active_blockchain_tokens(network)
         tracked_tokens = svc.get_tracked_blockchain_tokens(user, network)
         tracked_ids = {t.id for t in tracked_tokens}
 
-        return [
+        tokens = [
             {
                 "id": token.id,
                 "symbol": token.symbol,
@@ -107,45 +115,58 @@ class BlockchainTokensList(Resource):
             for token in all_tokens
         ]
 
+        return {"tokens": tokens}
+
 
 @ns.route("/tokens/add")
 class TokensAdd(Resource):
     """
     Добавление токена в список отслеживаемых пользователем.
-
     """
 
     @jwt_required()
     @ns.expect(add_blockchain_token_in)
-    def post(self) -> Dict[str, Any] | int:
+    def post(self) -> tuple[Dict[str, Any], int]:
         """
         Добавить токен в отслеживаемые текущим пользователем.
 
         Returns:
-            Tuple[Dict[str, Any], int]: Сообщение об успешном добавлении и HTTP статус 201.
+            dict, int: Сообщение об успешном добавлении и HTTP статус 201.
 
         Raises:
-            400: При отсутствии blockchain_token_id или ошибках сервиса.
-            404: Если пользователь не найден.
+            UserNotFoundError: Если пользователь не найден (404).
+            ValueError: Для ошибок валидации или бизнес-логики (400).
+            Exception: Для неожиданных ошибок (500).
         """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            ns.abort(404, "User not found")
+            logger.error(f"User with ID {user_id} not found")
+            raise UserNotFoundError()
 
-        blockchain_token_id = ns.payload.get("blockchain_token_id")
-        if not blockchain_token_id:
-            ns.abort(400, "blockchain_token_id required")
+        data = request.get_json()
+        if not data or "blockchain_token_id" not in data:
+            logger.error("Missing 'blockchain_token_id' in request body")
+            raise ValueError("blockchain_token_id is required")
+
+        blockchain_token_id = data["blockchain_token_id"]
+        if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
+            logger.error(
+                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            raise ValueError("blockchain_token_id must be a positive integer")
 
         try:
             tracked = svc.add_tracked_token(user, blockchain_token_id)
+            logger.info(
+                f"User {user.id} added token {blockchain_token_id} to tracked")
+            return {
+                "message": "Token added successfully",
+                "blockchain_token_id": tracked.blockchain_token_id,
+            }, 201
         except Exception as e:
-            ns.abort(400, str(e))
-
-        return {
-            "message": "Token added",
-            "blockchain_token_id": tracked.blockchain_token_id,
-        }, 201
+            logger.error(
+                f"Unexpected error in add_tracked_token for user {user.id}: {e}")
+            raise InternalServerError(f"Failed to remove token: {str(e)}")
 
 
 @ns.route("/tokens/remove")
@@ -156,47 +177,50 @@ class TokensRemove(Resource):
 
     @jwt_required()
     @ns.expect(remove_blockchain_token_in)
-    def delete(self) -> tuple[dict, int]:
+    def delete(self) -> tuple[Dict[str, Any], int]:
         """
         Удаляет токен из списка отслеживаемых текущим пользователем.
 
-        Метод требует JWT-авторизацию.
-
-        Args:
-            В теле запроса (JSON) должен присутствовать параметр:
-                blockchain_token_id (str): Идентификатор токена в блокчейне.
+        Returns:
+            dict, int: Подтверждение удаления и HTTP статус 200.
 
         Raises:
-            400: Если параметр blockchain_token_id отсутствует в запросе.
-            404: Если пользователь не найден или токен не найден в списке отслеживаемых.
-            500: При ошибках удаления токена.
-
-        Returns:
-            dict: JSON с подтверждением удаления и идентификатором удалённого токена, например:
-                {
-                    "message": "Token removed",
-                    "blockchain_token_id": "<id_токена>"
-                }
-            HTTP статус 200 при успешном удалении.
+            UserNotFoundError: Если пользователь не найден (404).
+            ValueError: Для ошибок валидации (400).
+            TrackedTokenNotFoundError: Если токен не найден в отслеживаемых (404).
+            requests.HTTPError: Для HTTP-ошибок от внешних запросов (404 или 500).
+            Exception: Для неожиданных ошибок (500).
         """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            ns.abort(404, "User not found")
+            logger.error(f"User with ID {user_id} not found")
+            raise UserNotFoundError()
 
-        blockchain_token_id = ns.payload.get("blockchain_token_id")
-        if not blockchain_token_id:
-            ns.abort(400, "blockchain_token_id required")
+        data = request.get_json()
+        if not data or "blockchain_token_id" not in data:
+            logger.error("Missing 'blockchain_token_id' in request body")
+            raise ValueError("blockchain_token_id is required")
+
+        blockchain_token_id = data["blockchain_token_id"]
+        if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
+            logger.error(
+                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            raise ValueError("blockchain_token_id must be a positive integer")
 
         try:
             removed = svc.remove_tracked_token(user, blockchain_token_id)
             if not removed:
-                ns.abort(404, "Token not found in tracked list")
+                logger.warning(
+                    f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
+                raise TrackedTokenNotFoundError()
+            logger.info(
+                f"User {user.id} removed token {blockchain_token_id} from tracked")
+            return {
+                "message": "Token removed successfully",
+                "blockchain_token_id": blockchain_token_id,
+            }, 200
         except Exception as e:
-            ns.abort(500, f"Failed to remove token: {e}")
-
-        logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
-        return {
-            "message": "Token removed",
-            "blockchain_token_id": blockchain_token_id,
-        }, 200
+            logger.error(
+                f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
+            raise InternalServerError(f"Failed to remove token: {str(e)}")

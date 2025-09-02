@@ -1,7 +1,24 @@
+import requests
 from flask_restx import Namespace
 
 
-# Кастомные исключения Auth
+# Кастомные исключения
+
+# Общие
+class UserNotFoundError(Exception):
+    def __init__(self, message: str = "User not found") -> None:
+        self.message = message
+        super().__init__(self.message)
+
+
+class InternalServerError(Exception):
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(self.message)
+
+# Auth
+
+
 class RegistrationError(Exception):
     def __init__(self, message: str) -> None:
         self.message: str = message
@@ -73,29 +90,56 @@ class InsufficientBalanceError(Exception):
         self.message: str = message
 
 
+# Token
+
+class TrackedTokenNotFoundError(Exception):
+    def __init__(self, message: str = "Token not found in tracked list") -> None:
+        self.message = message
+        super().__init__(self.message)
+
+
 def register_error_handlers(api_namespace: Namespace) -> None:
     """
     Регистрирует обработчики пользовательских исключений в заданном
     пространстве имён API.
 
     Добавляет обработчики ошибок для следующих исключений:
-    - RegistrationError
-    - EmailConfirmationError
-    - PasswordResetError
-    - WalletCreationError
-    - WalletRetrievalError
-
-    Return: JSON-ответ с сообщением об ошибке и HTTP статусом 400.
+    - ValueError (400 Bad Request)
+    - InternalServerError (Internal Server Error)
+    - RegistrationError (400 Bad Request)
+    - EmailConfirmationError (400 Bad Request)
+    - PasswordResetError (400 Bad Request)
+    - WalletCreationError (400 Bad Request)
+    - WalletRetrievalError (404 Not Found)
+    - TransferFeeRetrievalError (500 Internal Server Error)
+    - WithdrawError (400 Bad Request)
+    - BalanceError (500 Internal Server Error)
+    - TransactionError (500 Internal Server Error)
+    - ReferralError (500 Internal Server Error)
+    - PackageNotFoundError (404 Not Found)
+    - NetworkNotFoundError (404 Not Found)
+    - InsufficientBalanceError (400 Bad Request)
+    - TrackedTokenNotFoundError (404 Not Found)
+    - UserNotFoundError (404 Not Found)
+    - requests.HTTPError (404 или 500 в зависимости от статуса)
 
     :param api_namespace: Пространство имён Flask-RESTx, в котором
     регистрируются обработчики.
     :return: None
     """
 
-    # общий
+    # Общий
     @api_namespace.errorhandler(ValueError)
     def handle_value_error(error: ValueError) -> tuple[dict, int]:
         return {"error": "400 Bad Request", "message": str(error)}, 400
+
+    @api_namespace.errorhandler(UserNotFoundError)
+    def handle_user_not_found_error(error: UserNotFoundError) -> tuple[dict, int]:
+        return {"error": "404 Not Found", "message": error.message}, 404
+
+    @api_namespace.errorhandler(InternalServerError)
+    def handle_internal_server_error(error: InternalServerError) -> tuple[dict, int]:
+        return {"error": "500 Internal Server Error", "message": error.message}, 500
 
     # Auth
     @api_namespace.errorhandler(RegistrationError)
@@ -182,3 +226,15 @@ def register_error_handlers(api_namespace: Namespace) -> None:
         error: InsufficientBalanceError,
     ) -> tuple[dict, int]:
         return {"error": "400 Bad Request", "message": str(error)}, 400
+
+    # Token
+
+    @api_namespace.errorhandler(TrackedTokenNotFoundError)
+    def handle_tracked_token_not_found_error(error: TrackedTokenNotFoundError) -> tuple[dict, int]:
+        return {"error": "404 Not Found", "message": error.message}, 404
+
+    @api_namespace.errorhandler(requests.HTTPError)
+    def handle_requests_http_error(error: requests.HTTPError) -> tuple[dict, int]:
+        if error.response is not None and error.response.status_code == 404:
+            return {"error": "404 Not Found", "message": "External resource not found"}, 404
+        return {"error": "500 Internal Server Error", "message": str(error)}, 500

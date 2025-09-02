@@ -26,7 +26,6 @@ ns = Namespace("wallets", description="Кошельки, баланс, выво�
 # Регистрируем обработчики ошибок для данного namespace
 register_error_handlers(ns)
 
-
 # ----------- Swagger-модели для документации API ----------
 
 VALID_NETWORKS = ("erc20", "bep20", "trc20")
@@ -135,13 +134,16 @@ _tx = ns.model(
 # Модель для проверки адреса кошелька
 _check_in = ns.model(
     "CheckWalletIn",
-    {"wallet_address": fields.String(required=True, description="Адрес кошелька для проверки")},
+    {"wallet_address": fields.String(
+        required=True, description="Адрес кошелька для проверки")},
 )
 
-_check_out = ns.model("CheckWalletOut", {"status": fields.String(description="Статус проверки")})
+_check_out = ns.model(
+    "CheckWalletOut", {"status": fields.String(description="Статус проверки")})
 
 # Модель баланса рефералов
-_ref_bal = ns.model("RefBalance", {"balance": fields.String(description="Баланс рефералов")})
+_ref_bal = ns.model(
+    "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 
 # Модель запроса на вывод с реферального баланса
 _ref_wd = ns.model(
@@ -270,7 +272,8 @@ class WalletGet(Resource):
             res = svc.list_wallets(user)
             if not res:
                 raise WalletRetrievalError("Wallets not found.")
-            logger.info(f"Wallet addresses retrieved for user {user.id}: {res}")
+            logger.info(
+                f"Wallet addresses retrieved for user {user.id}: {res}")
             return res
         except SQLAlchemyError as e:
             logger.error(
@@ -282,7 +285,8 @@ class WalletGet(Resource):
             logger.warning(f"{e.message} for user {user.id}")
             raise
         except Exception as e:
-            logger.error(f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
             raise WalletRetrievalError("Failed to get wallets.")
 
 
@@ -308,7 +312,6 @@ class CheckWallet(Resource):
         logger.info(f"Wallet check requested for address: {wallet_address}")
         # TODO: добавить реальную логику проверки безопасности адреса
         return {"status": "safe"}
-
 
 # @ns.route("/transfer-fee")
 # class TransferFee(Resource):
@@ -337,7 +340,6 @@ class CheckWallet(Resource):
 #         except Exception as e:
 #             logger.error(f"Failed to get transfer fees: {e}", exc_info=True)
 #             raise TransferFeeRetrievalError("Failed to get transfer fees.")
-
 
 # @ns.route("/withdraw")
 # class Withdraw(Resource):
@@ -388,7 +390,7 @@ class CheckWallet(Resource):
 #             raise WithdrawError("Database error occurred.")
 #         except Exception as e:
 #             logger.error(
-#                 f"Failed to withdraw funds for user {user.id}: {e}",
+#               f"Failed to withdraw funds for user {user.id}: {e}",
 #                 exc_info=True,
 #             )
 #             raise WithdrawError("Failed to withdraw funds.")
@@ -426,7 +428,8 @@ class TokenBalances(Resource):
 
         q = Decimal("0.000001")
         return {
-            sym: str((bal if isinstance(bal, Decimal) else Decimal(bal)).quantize(q, rounding=ROUND_DOWN))
+            sym: str((bal if isinstance(bal, Decimal) else Decimal(
+                bal)).quantize(q, rounding=ROUND_DOWN))
             for sym, bal in balances.items()
         }
 
@@ -440,7 +443,6 @@ class PurchaseBalance(Resource):
     """
 
     @jwt_required()
-    @ns.expect(_balance_for_purchase_in)
     @ns.marshal_with(_balance_for_purchase_out)
     def get(self, network: str) -> Dict[str, Any]:
         """
@@ -482,7 +484,8 @@ class PurchaseBalance(Resource):
             )
             raise BalanceError("Database error occurred.")
         except Exception as e:
-            logger.error(f"Failed to get balance for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to get balance for user {user.id}: {e}", exc_info=True)
             raise BalanceError("Failed to get balance.")
 
         try:
@@ -504,9 +507,9 @@ class PurchaseBalance(Resource):
             return result
 
         except Exception as e:
-            logger.error(f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
+            logger.error(
+                f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
             raise BalanceError("Не удалось получить баланс для покупки.")
-
 
 # @ns.route("/ready/<string:network>")
 # class WalletReadiness(Resource):
@@ -564,7 +567,6 @@ class Transactions(Resource):
     """
 
     @jwt_required()
-    @ns.expect(_empty)
     @ns.marshal_list_with(_tx)
     def get(self) -> Dict[str, List[Dict[str, Any]]]:
         """
@@ -579,7 +581,8 @@ class Transactions(Resource):
         """
         user = User.query.get(get_jwt_identity())
         try:
-            txs = svc.history(user)  # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
+            # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
+            txs = svc.history(user)
             return {"transactions": txs}
         except Exception as e:
             logger.error(

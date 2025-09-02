@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, List
 
 from flask import request
@@ -15,6 +16,9 @@ from ..api.error_handlers import register_error_handlers as err
 
 ns = Namespace("packages", description="Каталог пакетов и покупки")
 err(ns)
+
+logger = logging.getLogger(__name__)
+
 
 # ---------- swagger models ----------
 
@@ -171,5 +175,14 @@ class PurchaseConfirm(Resource):
         data: Dict[str, Any] = request.json
         success: bool = data["success"]
 
-        p = svc.process_purchase_confirmation(purchase_id, success)
-        return {"purchase_id": p.id, "status": p.status.value}
+        try:
+            p = svc.process_purchase_confirmation(purchase_id, success)
+            return {"purchase_id": p.id, "status": p.status.value}
+        except ValueError as e:
+            # Обработка ошибок валидации (не найдена покупка или неверный статус)
+            ns.abort(400, str(e))
+        except Exception as e:
+            # Обработка других исключений (например, ошибки базы данных или email)
+            logger.error(
+                f"Ошибка при подтверждении покупки {purchase_id}: {e}")
+            ns.abort(500, "Internal server error")
