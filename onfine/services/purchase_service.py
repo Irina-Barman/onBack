@@ -7,7 +7,10 @@ from typing import Optional
 from onfine.blockchain.providers import ProviderManager
 from onfine.extensions import db
 from onfine.models.package import Package
-from onfine.models.platform_gas_expense import GasExpenseStatus, PlatformGasExpense
+from onfine.models.platform_gas_expense import (
+    GasExpenseStatus,
+    PlatformGasExpense,
+)
 from onfine.models.purchase import Purchase, PurchaseStatus, PurchaseStep
 from onfine.models.wallet import Wallet
 from onfine.services import locks
