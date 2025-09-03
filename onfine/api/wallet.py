@@ -590,28 +590,28 @@ class Transactions(Resource):
         -H "Accept: application/json"
 
     """
+# _____МЕТОД ТРЕБУЕТ ДОРАБОТКИ___
+    # @jwt_required()
+    # @ns.marshal_list_with(_tx)
+    # def get(self) -> Dict[str, List[Dict[str, Any]]]:
+    #     """
+    #     Получить историю транзакций текущего пользователя.
 
-    @jwt_required()
-    @ns.marshal_list_with(_tx)
-    def get(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Получить историю транзакций текущего пользователя.
+    #     Returns:
+    #         dict: Словарь с ключом "transactions", содержащий список транзакций.
+    #             Каждая транзакция — словарь с полями типа, суммы, сети, статуса и времени.
 
-        Returns:
-            dict: Словарь с ключом "transactions", содержащий список транзакций.
-                Каждая транзакция — словарь с полями типа, суммы, сети, статуса и времени.
-
-        Raises:
-            TransactionError: Если не удалось получить историю транзакций.
-        """
-        user = User.query.get(get_jwt_identity())
-        try:
-            # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
-            txs = svc.history(user)
-            return {"transactions": txs}
-        except Exception as e:
-            logger.error(
-                f"Error getting transaction history for user {user.id}: {e}",
-                exc_info=True,
-            )
-            raise TransactionError("Failed to get transaction history.")
+    #     Raises:
+    #         TransactionError: Если не удалось получить историю транзакций.
+    #     """
+    #     user = User.query.get(get_jwt_identity())
+    #     try:
+    #         # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
+    #         txs = svc.history(user)
+    #         return {"transactions": txs}
+    #     except Exception as e:
+    #         logger.error(
+    #             f"Error getting transaction history for user {user.id}: {e}",
+    #             exc_info=True,
+    #         )
+    #         raise TransactionError("Failed to get transaction history.")
