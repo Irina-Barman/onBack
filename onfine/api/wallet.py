@@ -258,14 +258,19 @@ class WalletGet(Resource):
     """
 
     @jwt_required()
-    @ns.expect(_empty)
     @ns.marshal_with(_wallets, skip_none=True)
-    def post(self) -> Dict[str, Any]:
+    def get(self) -> Dict[str, Any]:
         """
         Возвращает адреса кошельков по всем поддерживаемым сетям для текущего пользователя.
 
         Returns:
             Dict[str, Any]: Адреса кошельков.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/wallets/get-wallet" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
         """
         user = User.query.get(get_jwt_identity())
         try:
@@ -277,9 +282,7 @@ class WalletGet(Resource):
             return res
         except SQLAlchemyError as e:
             logger.error(
-                f"DB error retrieving wallets for user {user.id}: {e}",
-                exc_info=True,
-            )
+                f"DB error retrieving wallets for user {user.id}: {e}", exc_info=True)
             raise WalletRetrievalError("Database error occurred.")
         except WalletRetrievalError as e:
             logger.warning(f"{e.message} for user {user.id}")
@@ -412,6 +415,14 @@ class TokenBalances(Resource):
     def get(self, network: str) -> Dict[str, str]:
         """
         Получить балансы отслеживаемых токенов пользователя в указанной сети.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/wallets/balances/erc20" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        Замените erc20 на нужную сеть (erc20, bep20 или trc20).
+
         """
         if network not in VALID_NETWORKS:
             ns.abort(400, f"Unsupported network '{network}'")
@@ -453,6 +464,14 @@ class PurchaseBalance(Resource):
 
         Returns:
             Dict[str, Any]: Информация о балансе, достаточности токенов и газа.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/wallets/balance-for-purchase/erc20?amount=100.00&token_symbol=USDT" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        amount — необязательный, сумма токенов для покупки (например, 100.00).
+        token_symbol — необязательный, символ токена (по умолчанию USDT).
         """
         amount: Decimal | None = None
         user = User.query.get(get_jwt_identity())
@@ -564,6 +583,12 @@ class PurchaseBalance(Resource):
 class Transactions(Resource):
     """
     Получение истории транзакций пользователя.
+
+    Example request:
+    curl -X GET "http://127.0.0.1:5500/api/wallets/transactions" \
+        -H "Authorization: Bearer <your_jwt_token>" \
+        -H "Accept: application/json"
+
     """
 
     @jwt_required()
