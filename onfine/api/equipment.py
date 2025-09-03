@@ -46,7 +46,8 @@ class EqList(Resource):
     @ns.marshal_with(
         ns.model(
             "EquipmentListResponse",
-            {"items": fields.List(fields.Nested(_eq), description="Список оборудования")},
+            {"items": fields.List(fields.Nested(
+                _eq), description="Список оборудования")},
         ),
     )
     def get(self) -> Dict[str, List[Any]]:
@@ -55,6 +56,11 @@ class EqList(Resource):
 
         Returns:
             dict: Словарь с ключом "items", содержащим список оборудования.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/equipment/" \
+            -H "Accept: application/json"
+
         """
         from onfine.models.mining_equipment import MiningEquipment
 

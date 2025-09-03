@@ -141,6 +141,12 @@ class Info(Resource):
 
         Return:
             dict: Информация об аккаунте пользователя.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/emcd/info" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
         """
         return svc.get_account_info()
 
@@ -157,6 +163,13 @@ class Workers(Resource):
 
         Return:
             dict: Информация о работниках для указанной крипты.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/emcd/workers/<coin>" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        Замените <coin> на идентификатор крипты (например, "btc").
         """
         return svc.get_workers(coin)
 
@@ -173,6 +186,13 @@ class Income(Resource):
 
         Return:
             dict: Информация о доходах для указанной крипты.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/emcd/income/<coin>" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        Замените <coin> на идентификатор крипты (например, "btc").
         """
         return svc.get_income(coin)
 
@@ -189,5 +209,12 @@ class Payouts(Resource):
 
         Return:
             dict: Информация о выплатах для указанной крипты.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/emcd/payouts/<coin>" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        Замените <coin> на идентификатор крипты (например, "btc").
         """
         return svc.get_payouts(coin)

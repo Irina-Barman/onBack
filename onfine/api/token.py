@@ -91,6 +91,12 @@ class BlockchainTokensList(Resource):
         Raises:
             ValueError: Если сеть не поддерживается (400).
             UserNotFoundError: Если пользователь не найден (404).
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/tokens/blockchain-tokens/erc20" \
+            -H "Accept: application/json" \
+            -H "Authorization: Bearer <your_jwt_token>"
+
         """
         if network not in VALID_NETWORKS:
             raise ValueError(f"Unsupported network '{network}'")
