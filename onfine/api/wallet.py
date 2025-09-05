@@ -136,12 +136,18 @@ _check_in = ns.model(
     "CheckWalletIn",
     {"wallet_address": fields.String(
         required=True, description="Адрес кошелька для проверки")},
+    {"wallet_address": fields.String(
+        required=True, description="Адрес кошелька для проверки")},
 )
 
 _check_out = ns.model(
     "CheckWalletOut", {"status": fields.String(description="Статус проверки")})
+_check_out = ns.model(
+    "CheckWalletOut", {"status": fields.String(description="Статус проверки")})
 
 # Модель баланса рефералов
+_ref_bal = ns.model(
+    "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 _ref_bal = ns.model(
     "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 
@@ -279,6 +285,8 @@ class WalletGet(Resource):
                 raise WalletRetrievalError("Wallets not found.")
             logger.info(
                 f"Wallet addresses retrieved for user {user.id}: {res}")
+            logger.info(
+                f"Wallet addresses retrieved for user {user.id}: {res}")
             return res
         except SQLAlchemyError as e:
             logger.error(
@@ -288,6 +296,8 @@ class WalletGet(Resource):
             logger.warning(f"{e.message} for user {user.id}")
             raise
         except Exception as e:
+            logger.error(
+                f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
             logger.error(
                 f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
             raise WalletRetrievalError("Failed to get wallets.")
@@ -394,6 +404,7 @@ class CheckWallet(Resource):
 #         except Exception as e:
 #             logger.error(
 #               f"Failed to withdraw funds for user {user.id}: {e}",
+#               f"Failed to withdraw funds for user {user.id}: {e}",
 #                 exc_info=True,
 #             )
 #             raise WithdrawError("Failed to withdraw funds.")
@@ -439,6 +450,8 @@ class TokenBalances(Resource):
 
         q = Decimal("0.000001")
         return {
+            sym: str((bal if isinstance(bal, Decimal) else Decimal(
+                bal)).quantize(q, rounding=ROUND_DOWN))
             sym: str((bal if isinstance(bal, Decimal) else Decimal(
                 bal)).quantize(q, rounding=ROUND_DOWN))
             for sym, bal in balances.items()
@@ -505,6 +518,8 @@ class PurchaseBalance(Resource):
         except Exception as e:
             logger.error(
                 f"Failed to get balance for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to get balance for user {user.id}: {e}", exc_info=True)
             raise BalanceError("Failed to get balance.")
 
         try:
@@ -526,6 +541,8 @@ class PurchaseBalance(Resource):
             return result
 
         except Exception as e:
+            logger.error(
+                f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
             logger.error(
                 f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
             raise BalanceError("Не удалось получить баланс для покупки.")
