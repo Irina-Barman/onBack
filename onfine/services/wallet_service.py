@@ -2,11 +2,14 @@
 Сервис управления криптовалютными кошельками, балансами и транзакциями пользователей.
 
 Основные функции:
-- Создание кошельков пользователя для поддерживаемых сетей (ERC20, BEP20, TRC20) с генерацией адресов и шифрованием приватных ключей.
+- Создание кошельков пользователя для поддерживаемых сетей (ERC20, BEP20,
+TRC20) с генерацией адресов и шифрованием приватных ключей.
 - Получение списка кошельков пользователя.
-- Получение балансов отслеживаемых пользователем токенов с использованием multicall, если сеть это поддерживает.
+- Получение балансов отслеживаемых пользователем токенов с
+использованием multicall, если сеть это поддерживает.
 - Получение баланса конкретного токена пользователя через провайдер.
-- Управление операциями списания, вывода средств, начисления и работы с реферальными балансами (закомментировано в коде).
+- Управление операциями списания, вывода средств, начисления и работы с
+    реферальными балансами (закомментировано в коде).
 - Логирование ключевых операций и ошибок.
 
 Константы:
@@ -29,7 +32,8 @@ get_tracked_balances(user: User, network: str) -> Dict[str, Decimal]
     Получает балансы всех отслеживаемых токенов пользователя в сети.
     Использует multicall для оптимизации запросов, если провайдер и сеть поддерживают.
 
-get_blockchain_token_balance(user_address: str, network: str, token_contract_address: Optional[str]) -> Decimal
+get_blockchain_token_balance(user_address: str, network: str,
+token_contract_address: Optional[str]) -> Decimal
     Возвращает баланс конкретного токена пользователя через провайдера.
     Если token_contract_address не указан, возвращает баланс нативного токена сети.
 
@@ -39,7 +43,8 @@ get_blockchain_token_balance(user_address: str, network: str, token_contract_add
 - user_balance_stub: вычисление псевдо-баланса по истории транзакций.
 - history: получение истории транзакций пользователя.
 - balance_for: получение псевдо-баланса по сети.
-- debit, withdraw_funds, ref_balance, ref_credit, ref_debit, credit_to_user_balance, credit_to_network_balance:
+- debit, withdraw_funds, ref_balance, ref_credit, ref_debit,
+credit_to_user_balance, credit_to_network_balance:
   операции списания, вывода, работы с реферальными балансами и начислениями.
 
 Исключения:
@@ -117,7 +122,8 @@ def create_wallets(user: User, networks: List[str]) -> Dict[str, str]:
                     user_id=user.id,
                     network=net,
                     address=addr,
-                    pk_enc=Wallet.encrypt_pk(pk),  # Шифруем приватный ключ перед сохранением
+                    # Шифруем приватный ключ перед сохранением
+                    pk_enc=Wallet.encrypt_pk(pk),
                 )
                 db.session.add(w)
                 existing[net] = addr

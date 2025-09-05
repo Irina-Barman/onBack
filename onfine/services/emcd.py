@@ -34,7 +34,6 @@
     Получает данные о выплатах по указанной криптовалюте (endpoint v1/{coin}/payouts).
 """
 
-
 import os
 
 import requests

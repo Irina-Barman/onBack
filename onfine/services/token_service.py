@@ -112,18 +112,14 @@ def add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockc
     ).first()
     if existing:
         return existing
-    tracked = UserTrackedBlockchainToken(
-        user_id=user.id, blockchain_token_id=blockchain_token_id
-    )
+    tracked = UserTrackedBlockchainToken(user_id=user.id, blockchain_token_id=blockchain_token_id)
     db.session.add(tracked)
     try:
         db.session.commit()
-        logger.info(
-            f"Token {blockchain_token_id} added to tracked for user {user.id}")
+        logger.info(f"Token {blockchain_token_id} added to tracked for user {user.id}")
     except Exception as e:
         db.session.rollback()
-        logger.error(
-            f"Database error while adding tracked token for user {user.id}: {e}")
+        logger.error(f"Database error while adding tracked token for user {user.id}: {e}")
         raise InternalServerError(f"Failed to add tracked token: {str(e)}")
     return tracked
 
@@ -151,11 +147,9 @@ def remove_tracked_token(user: User, blockchain_token_id: int) -> bool:
     db.session.delete(tracked)
     try:
         db.session.commit()
-        logger.info(
-            f"Token {blockchain_token_id} removed from tracked for user {user.id}")
+        logger.info(f"Token {blockchain_token_id} removed from tracked for user {user.id}")
     except Exception as e:
         db.session.rollback()
-        logger.error(
-            f"Database error while removing tracked token for user {user.id}: {e}")
+        logger.error(f"Database error while removing tracked token for user {user.id}: {e}")
         raise InternalServerError(f"Failed to remove tracked token: {str(e)}")
     return True

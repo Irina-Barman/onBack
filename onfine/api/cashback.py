@@ -32,8 +32,7 @@ err_model = ns.model(
 )
 
 # Модель баланса рефералов
-_ref_bal = ns.model(
-    "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
+_ref_bal = ns.model("RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 
 # Модель запроса на вывод с реферального баланса
 _ref_wd = ns.model(
@@ -108,22 +107,19 @@ class RefWithdraw(Resource):
         try:
             amt = Decimal(ns.payload["amount"])
         except Exception:
-            logger.warning(
-                f"Invalid referral withdraw amount format from user {user.id}")
+            logger.warning(f"Invalid referral withdraw amount format from user {user.id}")
             ns.abort(400, "Invalid amount format")
 
         min_payout = Decimal(os.getenv("REF_MIN_PAYOUT", "10"))
         if amt < min_payout:
-            logger.warning(
-                f"Referral withdraw amount below minimum for user {user.id}: {amt} < {min_payout}")
+            logger.warning(f"Referral withdraw amount below minimum for user {user.id}: {amt} < {min_payout}")
             ns.abort(400, f"Amount below minimum payout {min_payout}")
 
         try:
             svc.ref_debit(user, amt)
             # При списании с основного баланса используем сеть ethereum, например
             svc.debit(user, "ethereum", -amt)
-            logger.info(
-                f"Successful referral withdraw for user {user.id}, amount: {amt}")
+            logger.info(f"Successful referral withdraw for user {user.id}, amount: {amt}")
         except ValueError as e:
             logger.warning(f"Referral withdraw error for user {user.id}: {e}")
             ns.abort(400, str(e))

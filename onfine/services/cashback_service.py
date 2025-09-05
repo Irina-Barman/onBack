@@ -32,7 +32,6 @@
 - ValueError при недостатке средств на балансе или отсутствии записи.
 """
 
-
 from __future__ import annotations
 
 import logging

@@ -1,8 +1,8 @@
 import requests
 from flask_restx import Namespace
 
-
 # Кастомные исключения
+
 
 # Общие
 class UserNotFoundError(Exception):
@@ -15,6 +15,7 @@ class InternalServerError(Exception):
     def __init__(self, message: str) -> None:
         self.message = message
         super().__init__(self.message)
+
 
 # Auth
 
@@ -91,6 +92,7 @@ class InsufficientBalanceError(Exception):
 
 
 # Token
+
 
 class TrackedTokenNotFoundError(Exception):
     def __init__(self, message: str = "Token not found in tracked list") -> None:

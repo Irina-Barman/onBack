@@ -12,11 +12,11 @@ class Package(db.Model):
     name = db.Column(db.String(120), nullable=False, unique=True)
     type = db.Column(db.String(32), nullable=False)
     price_usdt = db.Column(db.Numeric(18, 2), nullable=False)
-
+    # Новое поле популярности
+    popular = db.Column(db.Boolean, nullable=True, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     purchases = db.relationship("Purchase", back_populates="package")
-    # description тут удалён, в сваг модели это поле наполняется из package_info
 
     package_info = db.relationship(
         "PackageInfo",

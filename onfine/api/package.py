@@ -30,6 +30,7 @@ _pkg = ns.model(
         "type": fields.String,
         "price_usdt": fields.String,
         "description": fields.String,
+        "popular": fields.Boolean(description="Флаг популярного пакета"),
         # Добавляем поля из PackageProperty
         "term_months": fields.Integer,
         "interest_rate_from": fields.String,
@@ -192,6 +193,5 @@ class PurchaseConfirm(Resource):
             ns.abort(400, str(e))
         except Exception as e:
             # Обработка других исключений (например, ошибки базы данных или email)
-            logger.error(
-                f"Ошибка при подтверждении покупки {purchase_id}: {e}")
+            logger.error(f"Ошибка при подтверждении покупки {purchase_id}: {e}")
             ns.abort(500, "Internal server error")

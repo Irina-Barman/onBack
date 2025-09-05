@@ -46,8 +46,7 @@ class EqList(Resource):
     @ns.marshal_with(
         ns.model(
             "EquipmentListResponse",
-            {"items": fields.List(fields.Nested(
-                _eq), description="Список оборудования")},
+            {"items": fields.List(fields.Nested(_eq), description="Список оборудования")},
         ),
     )
     def get(self) -> Dict[str, List[Any]]:

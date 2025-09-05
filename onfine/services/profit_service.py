@@ -11,7 +11,8 @@
 - decimal.Decimal, decimal.ROUND_DOWN: Для точных денежных расчётов с округлением вниз.
 - typing.Any: Для аннотаций типов (например, для периодов).
 - SQLAlchemy (db): Для работы с базой данных.
-- Модели: EquipmentInvestment, MiningEquipment, MiningProfitBatch, Transaction, TxStatus, TxType, LedgerEntry, LedgerType.
+- Модели: EquipmentInvestment, MiningEquipment, MiningProfitBatch,
+Transaction, TxStatus, TxType, LedgerEntry, LedgerType.
 - wallet_service (wsvc): Сервис для зачисления средств на баланс пользователя (credit_to_balance).
 
 Функции:

@@ -23,8 +23,7 @@ _round = ns.model(
 
 _inv = ns.model(
     "InvestIn",
-    {"amount": fields.String(
-        required=True, description="Сумма инвестиций в USDT")},
+    {"amount": fields.String(required=True, description="Сумма инвестиций в USDT")},
 )
 
 

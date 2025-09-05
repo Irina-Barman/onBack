@@ -16,7 +16,8 @@
 - SQLAlchemy (db): Для работы с базой данных.
 - Модели: FundingRound, RoundState, RoundInvestment.
 - wallet_service.debit: Сервис для списания средств с баланса пользователя.
-- ledger_decorator.ledger: Декоратор для автоматического создания записей в бухгалтерском журнале (тип 'purchase', направление 'out').
+- ledger_decorator.ledger: Декоратор для автоматического создания записей в
+бухгалтерском журнале (тип 'purchase', направление 'out').
 
 Функции:
 - invest(user: Any, amount: Decimal) -> RoundInvestment

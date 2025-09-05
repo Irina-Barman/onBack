@@ -2,7 +2,6 @@ import logging
 from typing import Any, Dict, List
 
 from flask import request
-from flask import request
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
@@ -10,9 +9,6 @@ from onfine.models.user import User
 from onfine.services import token_service as svc
 
 from ..api.error_handlers import (
-    InternalServerError,
-    TrackedTokenNotFoundError,
-    UserNotFoundError,
     InternalServerError,
     TrackedTokenNotFoundError,
     UserNotFoundError,
@@ -96,8 +92,6 @@ class BlockchainTokensList(Resource):
     @jwt_required()
     @ns.marshal_with(blockchain_tokens_list_out)
     def get(self, network: str) -> Dict[str, List[Dict[str, Any]]]:
-    @ns.marshal_with(blockchain_tokens_list_out)
-    def get(self, network: str) -> Dict[str, List[Dict[str, Any]]]:
         """
         Получить список токенов в сети с отметкой отслеживаемых пользователем.
 
@@ -132,7 +126,6 @@ class BlockchainTokensList(Resource):
         tracked_ids = {t.id for t in tracked_tokens}
 
         tokens = [
-        tokens = [
             {
                 "id": token.id,
                 "symbol": token.symbol,
@@ -155,7 +148,6 @@ class TokensAdd(Resource):
 
     @jwt_required()
     @ns.expect(add_blockchain_token_in)
-    def post(self) -> tuple[Dict[str, Any], int]:
     def post(self) -> tuple[Dict[str, Any], int]:
         """
         Добавить токен в отслеживаемые текущим пользователем.
@@ -185,8 +177,7 @@ class TokensAdd(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(
-                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
             logger.error(f"User with ID {user_id} not found")
             raise UserNotFoundError()
@@ -198,30 +189,25 @@ class TokensAdd(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(
-                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
 
         try:
             tracked = svc.add_tracked_token(user, blockchain_token_id)
-            logger.info(
-                f"User {user.id} added token {blockchain_token_id} to tracked")
+            logger.info(f"User {user.id} added token {blockchain_token_id} to tracked")
             return {
                 "message": "Token added successfully",
                 "blockchain_token_id": tracked.blockchain_token_id,
             }, 201
-            logger.info(
-                f"User {user.id} added token {blockchain_token_id} to tracked")
+            logger.info(f"User {user.id} added token {blockchain_token_id} to tracked")
             return {
                 "message": "Token added successfully",
                 "blockchain_token_id": tracked.blockchain_token_id,
             }, 201
         except Exception as e:
-            logger.error(
-                f"Unexpected error in add_tracked_token for user {user.id}: {e}")
+            logger.error(f"Unexpected error in add_tracked_token for user {user.id}: {e}")
             raise InternalServerError(f"Failed to remove token: {str(e)}")
-            logger.error(
-                f"Unexpected error in add_tracked_token for user {user.id}: {e}")
+            logger.error(f"Unexpected error in add_tracked_token for user {user.id}: {e}")
             raise InternalServerError(f"Failed to remove token: {str(e)}")
 
 
@@ -234,12 +220,12 @@ class TokensRemove(Resource):
     @jwt_required()
     @ns.expect(remove_blockchain_token_in)
     def delete(self) -> tuple[Dict[str, Any], int]:
-    def delete(self) -> tuple[Dict[str, Any], int]:
         """
         Удаляет токен из списка отслеживаемых текущим пользователем.
 
         Returns:
             dict, int: Подтверждение удаления и HTTP статус 200.
+
         Returns:
             dict, int: Подтверждение удаления и HTTP статус 200.
 
@@ -268,8 +254,7 @@ class TokensRemove(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(
-                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
             logger.error(f"User with ID {user_id} not found")
             raise UserNotFoundError()
@@ -281,35 +266,28 @@ class TokensRemove(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(
-                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
 
         try:
             removed = svc.remove_tracked_token(user, blockchain_token_id)
             if not removed:
-                logger.warning(
-                    f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
+                logger.warning(f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
                 raise TrackedTokenNotFoundError()
-            logger.info(
-                f"User {user.id} removed token {blockchain_token_id} from tracked")
+            logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
             return {
                 "message": "Token removed successfully",
                 "blockchain_token_id": blockchain_token_id,
             }, 200
-                logger.warning(
-                    f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
-                raise TrackedTokenNotFoundError()
-            logger.info(
-                f"User {user.id} removed token {blockchain_token_id} from tracked")
+            logger.warning(f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
+            raise TrackedTokenNotFoundError()
+            logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
             return {
                 "message": "Token removed successfully",
                 "blockchain_token_id": blockchain_token_id,
             }, 200
         except Exception as e:
-            logger.error(
-                f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
+            logger.error(f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
             raise InternalServerError(f"Failed to remove token: {str(e)}")
-            logger.error(
-                f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
+            logger.error(f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
             raise InternalServerError(f"Failed to remove token: {str(e)}")
