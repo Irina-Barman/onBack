@@ -1,3 +1,85 @@
+"""
+Модуль сервиса пакетов.
+
+Основные функции:
+- Получение списка пакетов с ценами и свойствами.
+- Получение списка пакетов без цен (для анонимных пользователей).
+- Получение и кэширование газовых цен по сетям.
+- Сброс кэша газовых цен.
+- Проверка или создание новой покупки с учётом баланса и газа.
+- Создание новой покупки.
+- Обработка подтверждения или отмены покупки с созданием транзакций, отправкой email и событий в Kafka.
+- Отправка событий о покупках в Kafka.
+- Проверка статуса транзакций в блокчейн-сетях (ERC20, BEP20, TRC20).
+- Подтверждение транзакций с проверкой баланса, переводом средств и отправкой уведомлений.
+
+Используемые константы:
+- PurchaseStatus.pending (str): Статус ожидающей покупки.
+- PurchaseStatus.confirmed (str): Статус подтверждённой покупки.
+- PurchaseStatus.canceled (str): Статус отменённой покупки.
+
+Зависимости:
+- logging: Для логирования операций и ошибок.
+- time: Для задержек при проверке транзакций.
+- decimal.Decimal: Для точных расчётов денежных сумм.
+- functools.lru_cache: Для кэширования газовых цен.
+- typing: Для аннотаций типов (Any, Dict, List, TypedDict).
+- sqlalchemy.orm.joinedload: Для оптимизации запросов с жадной загрузкой.
+- web3.Web3: Для взаимодействия с Ethereum-подобными сетями (ERC20, BEP20).
+- onfine.blockchain.providers.TRC20, ProviderManager: Для работы с TRC20 сетью.
+- onfine.models.wallet.Wallet: Модель кошелька пользователя.
+- onfine.services.email_service.EmailService: Сервис для отправки email-уведомлений.
+- onfine.api.error_handlers: Исключения (InsufficientBalanceError, NetworkNotFoundError, PackageNotFoundError).
+- onfine.extensions.db: Сессия SQLAlchemy для работы с базой данных.
+- onfine.models.network_gas.NetworkGas: Модель для хранения газовых цен по сетям.
+- onfine.models.package.Package: Модель пакета.
+- onfine.models.purchase.Purchase, PurchaseStatus: Модель покупки и статусы.
+- onfine.models.transactions.Transaction: Модель транзакции.
+- onfine.models.user.User: Модель пользователя.
+- onfine.utils.kafka_producer as kfk: Продюсер для отправки событий в Kafka.
+
+Функции:
+- list_packages() -> List[Dict[str, Any]]
+    Получает список всех пакетов с их основными атрибутами, свойствами и ценами.
+    Использует жадную загрузку для оптимизации. Возвращает список словарей с данными пакетов.
+
+- list_packages_no_price() -> List[Dict[str, Any]]
+    Получает список всех пакетов без поля цены. Используется для анонимных пользователей.
+
+- gas_table() -> Dict[str, Decimal]
+    Создаёт и кэширует таблицу газовых цен для всех сетей из базы данных.
+    Возвращает словарь {сеть: цена_газа}.
+
+- reset_gas_table_cache() -> None
+    Сбрасывает кэш газовых цен, очищая его для обновления данных.
+
+- check_or_create_purchase(user: User, package_id: int, network: str) -> PurchaseResult
+    Проверяет наличие ожидающей покупки или создаёт новую с учётом цены пакета и газа.
+
+- create_purchase(user: User, pkg: Package, network: str) -> Purchase
+    Создаёт новую покупку с статусом 'pending' и сохраняет в базе.
+
+- process_purchase_confirmation(purchase_id: int, success: bool) -> Purchase
+    Обрабатывает подтверждение или отмену покупки: обновляет статус, создаёт транзакцию,
+    отправляет email и событие в Kafka.
+
+- send_purchase_event_to_kafka(purchase: Purchase, success: bool) -> None
+    Отправляет событие о завершении покупки в Kafka.
+
+- check_transaction_status(network: str, tx_id: str) -> bool
+    Проверяет статус транзакции в сети (ERC20, BEP20, TRC20).
+
+- confirm_transaction(transaction: Transaction) -> bool
+    Подтверждает транзакцию: проверяет статус, отправляет уведомления.
+
+Исключения:
+- PackageNotFoundError: При отсутствии пакета.
+- NetworkNotFoundError: При отсутствии сети в газовых ценах.
+- InsufficientBalanceError: При недостатке средств.
+- ValueError: При некорректных данных или статусах.
+- Exception: Общие ошибки при работе с блокчейном, email или Kafka.
+"""
+
 import logging
 import time
 from decimal import Decimal

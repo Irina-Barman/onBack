@@ -1,3 +1,40 @@
+"""
+Сервис управления блокчейн-токенами и их отслеживанием пользователями.
+
+Основные функции:
+- Получение всех активных токенов для заданной сети.
+- Получение токенов, отслеживаемых конкретным пользователем в сети.
+- Добавление токена в список отслеживаемых пользователем.
+- Удаление токена из списка отслеживаемых пользователем.
+
+Используемые компоненты:
+- Модели: BlockchainTokens, User, UserTrackedBlockchainToken.
+- SQLAlchemy (db) для работы с базой данных.
+- Логирование для аудита операций.
+- Кастомное исключение InternalServerError для обработки ошибок базы данных.
+
+Функции:
+
+get_all_active_blockchain_tokens(network: str) -> List[BlockchainTokens]
+    Возвращает список всех активных токенов для указанной блокчейн-сети.
+
+get_tracked_blockchain_tokens(user: User, network: str) -> List[BlockchainTokens]
+    Возвращает список активных токенов, которые пользователь отслеживает в заданной сети.
+
+add_tracked_token(user: User, blockchain_token_id: int) -> UserTrackedBlockchainToken
+    Добавляет токен в список отслеживаемых пользователем.
+    Если токен уже отслеживается, возвращает существующую запись.
+    При ошибках базы данных вызывает InternalServerError.
+
+remove_tracked_token(user: User, blockchain_token_id: int) -> bool
+    Удаляет токен из списка отслеживаемых пользователем.
+    Возвращает True при успешном удалении, False если токен не найден.
+    При ошибках базы данных вызывает InternalServerError.
+
+Исключения:
+- InternalServerError при ошибках работы с базой данных (например, при commit).
+"""
+
 from __future__ import annotations
 
 import logging

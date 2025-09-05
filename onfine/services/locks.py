@@ -1,3 +1,54 @@
+"""
+Модуль сервиса блокировки кошельков.
+
+Основные функции:
+- Проверка наличия активной блокировки кошелька.
+- Приобретение долгосрочной блокировки с TTL для предотвращения одновременных операций.
+- Продление существующей блокировки.
+- Снятие блокировки с переводом в статус released.
+- Короткая блокировка через контекстный менеджер с автоматическим снятием.
+- Обновление блокировки при приближении истечения TTL.
+- Удаление устаревших блокировок в пакетном режиме.
+
+Используемые константы:
+- WalletLockStatus.active, WalletLockStatus.released, WalletLockStatus.expired: Статусы блокировки.
+- WalletLockPurpose: Перечисление целей блокировки.
+
+Зависимости:
+- db: SQLAlchemy сессия для работы с базой данных.
+- WalletLock, WalletLockPurpose, WalletLockStatus: Модели и константы для блокировки кошельков.
+- contextlib: Для реализации контекстного менеджера.
+- datetime, timedelta: Для работы с TTL и временем.
+- uuid: Для генерации уникальных токенов держателя блокировки.
+- typing: Для аннотаций типов.
+
+Функции:
+- is_wallet_locked(wallet_id: int) -> bool
+    Проверяет, есть ли активная, не истёкшая блокировка для кошелька.
+
+- acquire_wallet_lock(wallet_id: int, purpose: WalletLockPurpose, ttl_seconds: int = 300, comment: Optional[str] = None) -> tuple[int, str]
+    Создаёт активную блокировку с TTL. Возвращает ID блокировки и токен держателя. Гарантирует уникальность active блокировки на кошелёк.
+
+- extend_wallet_lock(lock_id: int, holder_token: str, add_seconds: int = 120) -> None
+    Продлевает TTL активной блокировки, если токен совпадает.
+
+- release_wallet_lock(lock_id: int, holder_token: str) -> None
+    Снимает блокировку, переводя в статус released и проставляя время снятия.
+
+- lock_wallet_short(wallet_id: int, purpose: WalletLockPurpose, ttl_seconds: int = 60, comment: Optional[str] = None)
+    Контекстный менеджер для короткой блокировки с автоматическим снятием по выходу.
+
+- refresh_lock_if_needed(lock_id: int, holder_token: str, min_left_sec: int = 30, extend_sec: int = 120) -> None
+    Продлевает блокировку, если оставшееся время TTL меньше порога.
+
+- expire_stale_locks(batch_limit: int = 200) -> int
+    Переводит истёкшие active блокировки в expired. Возвращает количество обработанных.
+
+Исключения:
+- WalletLockedError при попытке приобрести блокировку, если кошелёк уже заблокирован.
+- IntegrityError (из SQLAlchemy) при нарушении уникальности блокировки.
+"""
+
 from __future__ import annotations
 
 import uuid
@@ -8,7 +59,11 @@ from typing import Optional
 from sqlalchemy.exc import IntegrityError
 
 from onfine.extensions import db
-from onfine.models.wallet_lock import WalletLock, WalletLockPurpose, WalletLockStatus
+from onfine.models.wallet_lock import (
+    WalletLock,
+    WalletLockPurpose,
+    WalletLockStatus,
+)
 
 
 class WalletLockedError(Exception):

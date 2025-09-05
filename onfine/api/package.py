@@ -103,6 +103,15 @@ class PackageList(Resource):
 
         Если передан валидный JWT токен — возвращает пакеты со стоимостью.
         Если токен отсутствует или недействителен — возвращает пакеты без стоимости.
+
+        Example request:
+            curl -X GET "http://127.0.0.1:5500/api/packages/" \
+                -H "Accept: application/json"
+
+            curl -X GET "http://127.0.0.1:5500/api/packages/" \
+                -H "Accept: application/json" \
+                -H "Authorization: Bearer <your_jwt_token>"
+
         """
         try:
             # Попытка проверить токен без обязательного требования

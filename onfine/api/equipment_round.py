@@ -23,7 +23,8 @@ _round = ns.model(
 
 _inv = ns.model(
     "InvestIn",
-    {"amount": fields.String(required=True, description="Сумма инвестиций в USDT")},
+    {"amount": fields.String(
+        required=True, description="Сумма инвестиций в USDT")},
 )
 
 
@@ -36,6 +37,11 @@ class RoundList(Resource):
 
         Returns:
             List[FundingRound]: Список объектов фанд-раундов.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/rounds/" \
+            -H "Accept: application/json"
+
         """
         return FundingRound.query.all()
 

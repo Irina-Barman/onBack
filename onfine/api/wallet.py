@@ -136,12 +136,18 @@ _check_in = ns.model(
     "CheckWalletIn",
     {"wallet_address": fields.String(
         required=True, description="Адрес кошелька для проверки")},
+    {"wallet_address": fields.String(
+        required=True, description="Адрес кошелька для проверки")},
 )
 
 _check_out = ns.model(
     "CheckWalletOut", {"status": fields.String(description="Статус проверки")})
+_check_out = ns.model(
+    "CheckWalletOut", {"status": fields.String(description="Статус проверки")})
 
 # Модель баланса рефералов
+_ref_bal = ns.model(
+    "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 _ref_bal = ns.model(
     "RefBalance", {"balance": fields.String(description="Баланс рефералов")})
 
@@ -258,14 +264,19 @@ class WalletGet(Resource):
     """
 
     @jwt_required()
-    @ns.expect(_empty)
     @ns.marshal_with(_wallets, skip_none=True)
-    def post(self) -> Dict[str, Any]:
+    def get(self) -> Dict[str, Any]:
         """
         Возвращает адреса кошельков по всем поддерживаемым сетям для текущего пользователя.
 
         Returns:
             Dict[str, Any]: Адреса кошельков.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/wallets/get-wallet" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
         """
         user = User.query.get(get_jwt_identity())
         try:
@@ -274,17 +285,19 @@ class WalletGet(Resource):
                 raise WalletRetrievalError("Wallets not found.")
             logger.info(
                 f"Wallet addresses retrieved for user {user.id}: {res}")
+            logger.info(
+                f"Wallet addresses retrieved for user {user.id}: {res}")
             return res
         except SQLAlchemyError as e:
             logger.error(
-                f"DB error retrieving wallets for user {user.id}: {e}",
-                exc_info=True,
-            )
+                f"DB error retrieving wallets for user {user.id}: {e}", exc_info=True)
             raise WalletRetrievalError("Database error occurred.")
         except WalletRetrievalError as e:
             logger.warning(f"{e.message} for user {user.id}")
             raise
         except Exception as e:
+            logger.error(
+                f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
             logger.error(
                 f"Failed to get wallets for user {user.id}: {e}", exc_info=True)
             raise WalletRetrievalError("Failed to get wallets.")
@@ -391,6 +404,7 @@ class CheckWallet(Resource):
 #         except Exception as e:
 #             logger.error(
 #               f"Failed to withdraw funds for user {user.id}: {e}",
+#               f"Failed to withdraw funds for user {user.id}: {e}",
 #                 exc_info=True,
 #             )
 #             raise WithdrawError("Failed to withdraw funds.")
@@ -412,6 +426,14 @@ class TokenBalances(Resource):
     def get(self, network: str) -> Dict[str, str]:
         """
         Получить балансы отслеживаемых токенов пользователя в указанной сети.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/wallets/balances/erc20" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        Замените erc20 на нужную сеть (erc20, bep20 или trc20).
+
         """
         if network not in VALID_NETWORKS:
             ns.abort(400, f"Unsupported network '{network}'")
@@ -428,6 +450,8 @@ class TokenBalances(Resource):
 
         q = Decimal("0.000001")
         return {
+            sym: str((bal if isinstance(bal, Decimal) else Decimal(
+                bal)).quantize(q, rounding=ROUND_DOWN))
             sym: str((bal if isinstance(bal, Decimal) else Decimal(
                 bal)).quantize(q, rounding=ROUND_DOWN))
             for sym, bal in balances.items()
@@ -453,6 +477,14 @@ class PurchaseBalance(Resource):
 
         Returns:
             Dict[str, Any]: Информация о балансе, достаточности токенов и газа.
+
+        Example request:
+        curl -X GET "http://127.0.0.1:5500/api/wallets/balance-for-purchase/erc20?amount=100.00&token_symbol=USDT" \
+            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "Accept: application/json"
+
+        amount — необязательный, сумма токенов для покупки (например, 100.00).
+        token_symbol — необязательный, символ токена (по умолчанию USDT).
         """
         amount: Decimal | None = None
         user = User.query.get(get_jwt_identity())
@@ -486,6 +518,8 @@ class PurchaseBalance(Resource):
         except Exception as e:
             logger.error(
                 f"Failed to get balance for user {user.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to get balance for user {user.id}: {e}", exc_info=True)
             raise BalanceError("Failed to get balance.")
 
         try:
@@ -507,6 +541,8 @@ class PurchaseBalance(Resource):
             return result
 
         except Exception as e:
+            logger.error(
+                f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
             logger.error(
                 f"Ошибка при получении баланса для покупки: {e}", exc_info=True)
             raise BalanceError("Не удалось получить баланс для покупки.")
@@ -564,29 +600,35 @@ class PurchaseBalance(Resource):
 class Transactions(Resource):
     """
     Получение истории транзакций пользователя.
+
+    Example request:
+    curl -X GET "http://127.0.0.1:5500/api/wallets/transactions" \
+        -H "Authorization: Bearer <your_jwt_token>" \
+        -H "Accept: application/json"
+
     """
+# _____МЕТОД ТРЕБУЕТ ДОРАБОТКИ___
+    # @jwt_required()
+    # @ns.marshal_list_with(_tx)
+    # def get(self) -> Dict[str, List[Dict[str, Any]]]:
+    #     """
+    #     Получить историю транзакций текущего пользователя.
 
-    @jwt_required()
-    @ns.marshal_list_with(_tx)
-    def get(self) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Получить историю транзакций текущего пользователя.
+    #     Returns:
+    #         dict: Словарь с ключом "transactions", содержащий список транзакций.
+    #             Каждая транзакция — словарь с полями типа, суммы, сети, статуса и времени.
 
-        Returns:
-            dict: Словарь с ключом "transactions", содержащий список транзакций.
-                Каждая транзакция — словарь с полями типа, суммы, сети, статуса и времени.
-
-        Raises:
-            TransactionError: Если не удалось получить историю транзакций.
-        """
-        user = User.query.get(get_jwt_identity())
-        try:
-            # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
-            txs = svc.history(user)
-            return {"transactions": txs}
-        except Exception as e:
-            logger.error(
-                f"Error getting transaction history for user {user.id}: {e}",
-                exc_info=True,
-            )
-            raise TransactionError("Failed to get transaction history.")
+    #     Raises:
+    #         TransactionError: Если не удалось получить историю транзакций.
+    #     """
+    #     user = User.query.get(get_jwt_identity())
+    #     try:
+    #         # ТУТА НАДА ПЕРЕДЕЛАТЬ НА ПОЛУЧЕНИЕ ИСТОРИИ ИЗ СКАНЕРА
+    #         txs = svc.history(user)
+    #         return {"transactions": txs}
+    #     except Exception as e:
+    #         logger.error(
+    #             f"Error getting transaction history for user {user.id}: {e}",
+    #             exc_info=True,
+    #         )
+    #         raise TransactionError("Failed to get transaction history.")
