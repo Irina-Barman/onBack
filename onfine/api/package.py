@@ -9,6 +9,7 @@ from flask_jwt_extended import (
 )
 from flask_restx import Namespace, Resource, fields
 
+from onfine.models.package_properties import PackageCategory
 from onfine.models.user import User
 from onfine.services import package_service as svc
 
@@ -36,7 +37,10 @@ _pkg = ns.model(
         "interest_rate_from": fields.String,
         "interest_rate_to": fields.String,
         "bonuses": fields.String,
-        "target_audience": fields.String,
+        "target_audience": fields.String(
+            description="Целевая аудитория пакета",
+            enum=[cat.value for cat in PackageCategory]
+        ),
     },
 )
 
@@ -193,5 +197,6 @@ class PurchaseConfirm(Resource):
             ns.abort(400, str(e))
         except Exception as e:
             # Обработка других исключений (например, ошибки базы данных или email)
-            logger.error(f"Ошибка при подтверждении покупки {purchase_id}: {e}")
+            logger.error(
+                f"Ошибка при подтверждении покупки {purchase_id}: {e}")
             ns.abort(500, "Internal server error")

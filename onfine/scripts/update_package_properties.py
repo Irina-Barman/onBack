@@ -4,7 +4,7 @@ from typing import Dict, Optional, TypedDict
 from onfine.app_factory import create_app
 from onfine.extensions import db
 from onfine.models.package import Package
-from onfine.models.package_properties import PackageProperty
+from onfine.models.package_properties import PackageCategory, PackageProperty
 
 
 class PackagePropertyData(TypedDict):
@@ -12,7 +12,7 @@ class PackagePropertyData(TypedDict):
     interest_rate_from: Decimal
     interest_rate_to: Decimal
     bonuses: str
-    target_audience: str
+    target_audience: PackageCategory
 
 
 packages_property: Dict[str, PackagePropertyData] = {
@@ -21,77 +21,77 @@ packages_property: Dict[str, PackagePropertyData] = {
         "interest_rate_from": Decimal("10.00"),
         "interest_rate_to": Decimal("20.00"),
         "bonuses": "Доступ к базовой аналитике",
-        "target_audience": "Начинающие инвесторы",
+        "target_audience": PackageCategory.BEGINNERS,
     },
     "Starter": {
         "term_months": 6,
         "interest_rate_from": Decimal("11.00"),
         "interest_rate_to": Decimal("22.00"),
         "bonuses": "+ ежемесячный отчет",
-        "target_audience": "Инвесторы с небольшим опытом",
+        "target_audience": PackageCategory.STABLE_INCOME,
     },
     "Basic": {
         "term_months": 12,
         "interest_rate_from": Decimal("12.00"),
         "interest_rate_to": Decimal("25.00"),
         "bonuses": "Чат-поддержка",
-        "target_audience": "Инвесторы с небольшим опытом",
+        "target_audience": PackageCategory.STABLE_INCOME,
     },
     "Standard": {
         "term_months": 12,
         "interest_rate_from": Decimal("13.00"),
         "interest_rate_to": Decimal("28.00"),
         "bonuses": "+ вебинары для новичков",
-        "target_audience": "Инвесторы с небольшим опытом",
+        "target_audience": PackageCategory.STABLE_INCOME,
     },
     "Advanced": {
         "term_months": 12,
         "interest_rate_from": Decimal("14.00"),
         "interest_rate_to": Decimal("32.00"),
         "bonuses": "Персональный менеджер",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
     "Premium": {
         "term_months": 18,
         "interest_rate_from": Decimal("15.00"),
         "interest_rate_to": Decimal("35.00"),
         "bonuses": "VIP-поддержка",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
     "Pro": {
         "term_months": 18,
         "interest_rate_from": Decimal("16.00"),
         "interest_rate_to": Decimal("38.00"),
         "bonuses": "Индивидуальная стратегия",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
     "Expert": {
         "term_months": 24,
         "interest_rate_from": Decimal("17.00"),
         "interest_rate_to": Decimal("42.00"),
         "bonuses": "Приоритетные выплаты",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
     "Business": {
         "term_months": 24,
         "interest_rate_from": Decimal("18.00"),
         "interest_rate_to": Decimal("45.00"),
         "bonuses": "Консультации с CEO",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
     "VIP": {
         "term_months": 24,
         "interest_rate_from": Decimal("19.00"),
         "interest_rate_to": Decimal("48.00"),
         "bonuses": "Участие в прибыли компании",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
     "Elite": {
         "term_months": 24,
         "interest_rate_from": Decimal("20.00"),
         "interest_rate_to": Decimal("50.00"),
         "bonuses": "Кастомные условия",
-        "target_audience": "Опытные инвесторы",
+        "target_audience": PackageCategory. MAXIMUM_EARNING,
     },
 }
 
