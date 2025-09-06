@@ -10,6 +10,7 @@ from .equipment import ns as equipment_ns
 from .kafka import kafka_ns
 from .package import ns as package_ns
 from .token import ns as token_ns
+from .twofa import ns as twofa_ns
 from .user import user_ns
 from .wallet import ns as wallet_ns
 
@@ -39,6 +40,7 @@ def register_namespaces(app: Flask) -> None:  # noqa D103
     )
 
     api.add_namespace(auth_ns)
+    api.add_namespace(twofa_ns, path="/auth/2fa")
     api.add_namespace(package_ns)
     api.add_namespace(wallet_ns)
     api.add_namespace(emcd_ns, path="/emcd")

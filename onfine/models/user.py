@@ -30,7 +30,9 @@ class User(db.Model):
         "User",
         backref=db.backref("partner", remote_side=[uid]),
     )
-
+    totp_secret_enc = db.Column(db.Text, nullable=True)
+    is_2fa_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    backup_codes_hash = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     # Обратная связь!! Без неё логает
     purchases = db.relationship("Purchase", back_populates="user")
