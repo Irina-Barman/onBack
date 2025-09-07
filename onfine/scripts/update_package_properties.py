@@ -28,14 +28,14 @@ packages_property: Dict[str, PackagePropertyData] = {
         "interest_rate_from": Decimal("11.00"),
         "interest_rate_to": Decimal("22.00"),
         "bonuses": "+ ежемесячный отчет",
-        "target_audience": PackageCategory.STABLE_INCOME,
+        "target_audience": PackageCategory.BEGINNERS,
     },
     "Basic": {
         "term_months": 12,
         "interest_rate_from": Decimal("12.00"),
         "interest_rate_to": Decimal("25.00"),
         "bonuses": "Чат-поддержка",
-        "target_audience": PackageCategory.STABLE_INCOME,
+        "target_audience": PackageCategory.BEGINNERS,
     },
     "Standard": {
         "term_months": 12,
@@ -49,14 +49,14 @@ packages_property: Dict[str, PackagePropertyData] = {
         "interest_rate_from": Decimal("14.00"),
         "interest_rate_to": Decimal("32.00"),
         "bonuses": "Персональный менеджер",
-        "target_audience": PackageCategory. MAXIMUM_EARNING,
+        "target_audience": PackageCategory. STABLE_INCOME,
     },
     "Premium": {
         "term_months": 18,
         "interest_rate_from": Decimal("15.00"),
         "interest_rate_to": Decimal("35.00"),
         "bonuses": "VIP-поддержка",
-        "target_audience": PackageCategory. MAXIMUM_EARNING,
+        "target_audience": PackageCategory. STABLE_INCOME,
     },
     "Pro": {
         "term_months": 18,
@@ -84,14 +84,14 @@ packages_property: Dict[str, PackagePropertyData] = {
         "interest_rate_from": Decimal("19.00"),
         "interest_rate_to": Decimal("48.00"),
         "bonuses": "Участие в прибыли компании",
-        "target_audience": PackageCategory. MAXIMUM_EARNING,
+        "target_audience": PackageCategory. EXPERIENCED_INVESTORS,
     },
     "Elite": {
         "term_months": 24,
         "interest_rate_from": Decimal("20.00"),
         "interest_rate_to": Decimal("50.00"),
         "bonuses": "Кастомные условия",
-        "target_audience": PackageCategory. MAXIMUM_EARNING,
+        "target_audience": PackageCategory. EXPERIENCED_INVESTORS,
     },
 }
 

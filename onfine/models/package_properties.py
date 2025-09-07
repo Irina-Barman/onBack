@@ -8,6 +8,7 @@ class PackageCategory(Enum):
     BEGINNERS = "beginners"
     STABLE_INCOME = "stable_income"
     MAXIMUM_EARNING = "maximum_earning"
+    EXPERIENCED_INVESTORS = "experienced_investors"
 
 
 class PackageProperty(db.Model):
