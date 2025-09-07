@@ -153,7 +153,7 @@ def list_packages() -> List[Dict[str, Any]]:
                 "interest_rate_from": str(prop.interest_rate_from) if prop else None,
                 "interest_rate_to": str(prop.interest_rate_to) if prop else None,
                 "bonuses": prop.bonuses if prop else None,
-                "target_audience": prop.target_audience if prop else None,
+                "target_audience": prop.target_audience.value if prop and prop.target_audience else None,  # noqa: E501
             },
         )
     return result
@@ -185,7 +185,7 @@ def list_packages_no_price() -> List[Dict[str, Any]]:
                 "interest_rate_from": str(prop.interest_rate_from) if prop else None,
                 "interest_rate_to": str(prop.interest_rate_to) if prop else None,
                 "bonuses": prop.bonuses if prop else None,
-                "target_audience": prop.target_audience if prop else None,
+                "target_audience": prop.target_audience.value if prop and prop.target_audience else None,
             },
         )
     return result
@@ -233,10 +233,12 @@ def check_or_create_purchase(user: User, package_id: int, network: str) -> Purch
     Returns:
         PurchaseResult: Словарь с объектом покупки и флагом источника данных.
     """
-    pending_purchase = Purchase.query.filter_by(user_id=user.id, status=PurchaseStatus.pending, network=network).first()
+    pending_purchase = Purchase.query.filter_by(
+        user_id=user.id, status=PurchaseStatus.pending, network=network).first()
 
     if pending_purchase:
-        logger.info(f"Найдена ожидающая покупка {pending_purchase.id} для пользователя {user.id} в сети {network}")
+        logger.info(
+            f"Найдена ожидающая покупка {pending_purchase.id} для пользователя {user.id} в сети {network}")
         return {"purchase": pending_purchase, "from_database": True}
 
     pkg = Package.query.get(package_id)
@@ -277,7 +279,8 @@ def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
     fee = gas_table().get(network)
     # ПОЛУЧЕНИЕ И РАССЧЕТ ЦЕНЫ ГАЗА ИЗ РАНТАЙМА + МОЖНО В КОРОТКИЙ КЭШ ПИХНУТЬ НА БУДУЩЕЕ
     if fee is None:
-        logger.error(f"Сеть {network} не найдена в таблице газовых цен при создании покупки")
+        logger.error(
+            f"Сеть {network} не найдена в таблице газовых цен при создании покупки")
         raise NetworkNotFoundError(f"Network {network} not found")
 
     purchase = Purchase(
@@ -292,7 +295,8 @@ def create_purchase(user: User, pkg: Package, network: str) -> Purchase:
     with db.session.begin():
         db.session.add(purchase)
         db.session.flush()  # Чтобы получить purchase.id
-        logger.info(f"Создана покупка {purchase.id} для пользователя {user.id}")
+        logger.info(
+            f"Создана покупка {purchase.id} для пользователя {user.id}")
 
     return purchase
 
@@ -317,7 +321,8 @@ def process_purchase_confirmation(purchase_id: int, success: bool) -> Purchase:
 
     if success:
         if p.status != PurchaseStatus.pending:
-            raise ValueError(f"Purchase {purchase_id} status is not pending, current status: {p.status}")
+            raise ValueError(
+                f"Purchase {purchase_id} status is not pending, current status: {p.status}")
 
         # ВОТ ТУТ УЖЕ БЛОКИРУЕМ СЧЕТ ПОЛЬЗОВАТЕЛЯ ЧТОБЫ НАС НЕ ЗАСКАМИЛИ НА ГАЗ
         #
@@ -365,7 +370,8 @@ def process_purchase_confirmation(purchase_id: int, success: bool) -> Purchase:
     else:
         # Отмена покупки
         if p.status != PurchaseStatus.pending:
-            raise ValueError(f"Purchase {purchase_id} status is not pending, current status: {p.status}")
+            raise ValueError(
+                f"Purchase {purchase_id} status is not pending, current status: {p.status}")
 
         p.status = PurchaseStatus.canceled
         with db.session.begin():
@@ -408,7 +414,8 @@ def send_purchase_event_to_kafka(purchase: Purchase, success: bool) -> None:
         )
         logger.info(f"Отправлено событие Kafka для покупки {purchase.id}")
     except Exception as e:
-        logger.error(f"Ошибка при отправке события Kafka для покупки {purchase.id}: {e}")
+        logger.error(
+            f"Ошибка при отправке события Kafka для покупки {purchase.id}: {e}")
         raise  # Можно выбросить исключение, чтобы обработать его на уровне API
 
 
@@ -431,7 +438,8 @@ def check_transaction_status(network: str, tx_id: str) -> bool:  # noqa: PLR0911
             # Используем Web3 для ERC20 и BEP20
             receipt = Web3.eth.get_transaction_receipt(tx_id)
             if receipt is None:
-                logger.warning(f"Транзакция {tx_id} еще не подтверждена или не найдена.")
+                logger.warning(
+                    f"Транзакция {tx_id} еще не подтверждена или не найдена.")
                 return False
             return receipt.status == 1  # Статус 1 означает успех
 
@@ -455,7 +463,8 @@ def check_transaction_status(network: str, tx_id: str) -> bool:  # noqa: PLR0911
                 if contract_ret == "SUCCESS":
                     return True
                 else:
-                    logger.warning(f"Транзакция {tx_id} не успешна: {contract_ret}")
+                    logger.warning(
+                        f"Транзакция {tx_id} не успешна: {contract_ret}")
                     return False
 
         else:
@@ -488,7 +497,8 @@ def confirm_transaction(transaction: Transaction) -> bool:  # noqa: PLR0911
     # Получаем кошелек пользователя для указанной сети
     wallet = Wallet.query.filter_by(user_id=user_id, network=network).first()
     if not wallet:
-        logger.error(f"Кошелек для пользователя {user_id} в сети {network} не найден")
+        logger.error(
+            f"Кошелек для пользователя {user_id} в сети {network} не найден")
         return False
 
     # Дешифруем приватный ключ кошелька
@@ -533,11 +543,13 @@ def confirm_transaction(transaction: Transaction) -> bool:  # noqa: PLR0911
                         context=context,
                     )
                 else:
-                    logger.warning(f"Пользователь с id {user_id} не найден для отправки уведомления")
+                    logger.warning(
+                        f"Пользователь с id {user_id} не найден для отправки уведомления")
 
                 return True
             else:
-                logger.info(f"Ожидание подтверждения транзакции {tx_id} (попытка {attempt + 1})")
+                logger.info(
+                    f"Ожидание подтверждения транзакции {tx_id} (попытка {attempt + 1})")
 
         logger.warning(f"Транзакция {tx_id} не подтверждена после ожидания")
         return False
