@@ -39,7 +39,7 @@ _pkg = ns.model(
         "bonuses": fields.String,
         "target_audience": fields.String(
             description="Целевая аудитория пакета",
-            enum=[cat.value for cat in PackageCategory]
+            enum=[cat.value for cat in PackageCategory],
         ),
     },
 )
@@ -197,6 +197,5 @@ class PurchaseConfirm(Resource):
             ns.abort(400, str(e))
         except Exception as e:
             # Обработка других исключений (например, ошибки базы данных или email)
-            logger.error(
-                f"Ошибка при подтверждении покупки {purchase_id}: {e}")
+            logger.error(f"Ошибка при подтверждении покупки {purchase_id}: {e}")
             ns.abort(500, "Internal server error")

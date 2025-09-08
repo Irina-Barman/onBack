@@ -30,8 +30,7 @@ class PackageProperty(db.Model):
     __tablename__ = "package_properties"
 
     id = db.Column(db.Integer, primary_key=True)
-    package_id = db.Column(db.Integer, db.ForeignKey(
-        "packages.id"), nullable=False, unique=True)
+    package_id = db.Column(db.Integer, db.ForeignKey("packages.id"), nullable=False, unique=True)
 
     term_months = db.Column(db.Integer, nullable=False)
     interest_rate_from = db.Column(db.Numeric(5, 2), nullable=False)
@@ -41,5 +40,4 @@ class PackageProperty(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    package = db.relationship(
-        "Package", back_populates="package_property", uselist=False)
+    package = db.relationship("Package", back_populates="package_property", uselist=False)

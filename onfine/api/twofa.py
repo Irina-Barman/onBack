@@ -1,15 +1,14 @@
 from io import BytesIO
-from typing import Dict, Tuple, Any
+from typing import Any, Dict, Tuple
 
-from flask import request, send_file, Response
+from flask import Response, request, send_file
 from flask_jwt_extended import get_jwt_identity, jwt_required
 from flask_restx import Namespace, Resource, fields
 
 from onfine.models.user import User
 from onfine.services.twofa_service import TwoFAService
 
-ns = Namespace("2fa", description="Two-Factor Authentication",
-               path="/auth/2fa")
+ns = Namespace("2fa", description="Two-Factor Authentication", path="/auth/2fa")
 
 twofa_setup = ns.model(
     "TwoFASetup",

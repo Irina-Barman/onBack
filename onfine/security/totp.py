@@ -38,11 +38,11 @@ qr_data_url(data: str) -> str
 
 import base64
 import io
-from typing import Union
 
 import pyotp
 import qrcode
 from flask import current_app
+from qrcode.image.pil import PilImage
 
 
 def generate_base32_secret() -> str:
@@ -109,7 +109,12 @@ def qr_png_bytes(data: str) -> bytes:
     Returns:
         bytes: PNG-изображение QR-кода.
     """
-    img = qrcode.make(data)
+    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_M)
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    img = qr.make_image(image_factory=PilImage, fill_color="white", back_color="black")
+
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
