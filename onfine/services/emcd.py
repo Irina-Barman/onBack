@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 import requests
 
+from onfine.models.emcd_account import EMCDAccountInfo, EMCDCoinInfo
 from onfine.models.emcd_income import EMCDIncome
 from onfine.models.emcd_payouts import EMCDPayout
 
@@ -98,30 +99,67 @@ class EMCDService:
 class EMCDDataSaver:
     """
     Класс для сохранения данных из EMCD API в базу данных.
-
-    Используется для сохранения доходов и выплат для конкретного пользователя.
-    Предотвращает дублирование записей на основе даты, монеты и user_id.
+    Для общего пула pool_id=0, без user_id.
     """
 
-    def __init__(self, user_id: int) -> None:
-        """
-        Инициализирует савер с ID пользователя.
-
-        Args:
-            user_id (int): ID пользователя для сохранения данных.
-        """
-        self.user_id = user_id
+    def __init__(self) -> None:
         self.emcd_service = EMCDService()
+        self.pool_id = 0  # фиксированный для общего пула
 
-    def save_income(self, coin: str, income_data: Dict[str, Any]) -> None:
+    def save_account_info(self, account_data: dict) -> None:
         """
-        Сохраняет данные о доходах для указанной монеты.
+        Сохраняет EMCDAccountInfo и EMCDCoinInfo из данных /info.
+        """
+        username = account_data.get('username', 'unknown')
+        date = datetime.now(tz=timezone.utc).date()
 
-        Args:
-            coin (str): Код монеты (например, 'btc').
+        # Поиск или создание записи аккаунта
+        account_info = EMCDAccountInfo.query.filter_by(
+            pool_id=self.pool_id, date=date).first()
+        if not account_info:
+            account_info = EMCDAccountInfo(
+                pool_id=self.pool_id,
+                username=username,
+                date=date
+            )
+            db.session.add(account_info)
+            db.session.flush()  # чтобы получить account_info.id
 
-        Note:
-            Пропускает существующие записи по дате, монете и user_id.
+        # Сохраняем данные по каждой монете
+        for coin_id, coin_data in account_data.get('coins', {}).items():
+            coin_info = EMCDCoinInfo.query.filter_by(
+                account_info_id=account_info.id,
+                coin_id=coin_id,
+                date=date
+            ).first()
+
+            if coin_info:
+                # Обновляем существующую запись
+                coin_info.address = coin_data.get('address', '')
+                coin_info.balance = float(coin_data.get('balance', 0))
+                coin_info.total_paid = float(coin_data.get('total_paid', 0))
+                coin_info.total_reward = float(coin_data.get('total_reward', 0))
+                coin_info.min_payout = float(coin_data.get('min_payout', 0))
+            else:
+                # Создаем новую запись
+                coin_info = EMCDCoinInfo(
+                    account_info_id=account_info.id,
+                    coin_id=coin_id,
+                    date=date,
+                    address=coin_data.get('address', ''),
+                    balance=float(coin_data.get('balance', 0)),
+                    total_paid=float(coin_data.get('total_paid', 0)),
+                    total_reward=float(coin_data.get('total_reward', 0)),
+                    min_payout=float(coin_data.get('min_payout', 0)),
+                    token_id=None
+                )
+                db.session.add(coin_info)
+
+        db.session.commit()
+
+    def save_income(self, coin: str) -> None:
+        """
+        Сохраняет доходы для монеты в EMCDIncome без user_id, с pool_id=0.
         """
         data = self.emcd_service.get_income(coin)
         if 'data' not in data:
@@ -130,16 +168,20 @@ class EMCDDataSaver:
         for item in data['data']:
             date = datetime.fromtimestamp(
                 item['timestamp'], tz=timezone.utc).date()
+
+            # Проверяем существование записи по дате, монете и pool_id=0
             existing = EMCDIncome.query.filter_by(
-                user_id=self.user_id, date=date, coin=coin
+                user_id=None,  # user_id нет, можно убрать из фильтра или сделать nullable
+                coin=coin,
+                date=date
             ).first()
             if existing:
                 continue
 
             income = EMCDIncome(
-                user_id=self.user_id,
+                user_id=None,  # в модели user_id nullable? Если нет, надо изменить модель
                 coin=coin,
-                token_id=None,  # Normalize via token_id if needed
+                token_id=None,
                 code=item.get('code', 0),
                 timestamp=item['timestamp'],
                 gmt_time=item['gmt_time'],
@@ -151,15 +193,9 @@ class EMCDDataSaver:
             db.session.add(income)
         db.session.commit()
 
-    def save_payouts(self, coin: str, payouts_data: Dict[str, Any]) -> None:
+    def save_payouts(self, coin: str) -> None:
         """
-        Сохраняет данные о выплатах для указанной монеты.
-
-        Args:
-            coin (str): Код монеты (например, 'btc').
-
-        Note:
-            Пропускает существующие записи по дате, монете и user_id.
+        Сохраняет выплаты для монеты в EMCDPayout без user_id, с pool_id=0.
         """
         data = self.emcd_service.get_payouts(coin)
         if 'data' not in data:
@@ -168,33 +204,37 @@ class EMCDDataSaver:
         for item in data['data']:
             date = datetime.fromtimestamp(
                 item['timestamp'], tz=timezone.utc).date()
+
             existing = EMCDPayout.query.filter_by(
-                user_id=self.user_id, date=date, coin=coin
+                user_id=None,
+                coin=coin,
+                date=date
             ).first()
             if existing:
                 continue
 
             payout = EMCDPayout(
-                user_id=self.user_id,
+                user_id=None,
                 coin=coin,
-                token_id=None,  # Normalize via token_id if needed
+                token_id=None,
                 code=item.get('code', 0),
                 timestamp=item['timestamp'],
                 gmt_time=item['gmt_time'],
-                payout=item['payout'],
-                type_=item['type'],
-                tx_id=item.get('tx_id'),
+                payout=item.get('amount', 0),  # В API поле называется amount
+                type_='payout',  # В API поле type отсутствует, можно задать вручную
+                tx_id=item.get('txid'),
                 date=date
             )
             db.session.add(payout)
         db.session.commit()
 
-    def save_all_for_coin(self, coin: str) -> None:
+    def save_all(self) -> None:
         """
-        Сохраняет все данные (доходы и выплаты) для указанной монеты.
+        Сохраняет всю информацию: account info, доходы и выплаты по всем монетам.
+        """
+        account_data = self.emcd_service.get_account_info()
+        self.save_account_info(account_data)
 
-        Args:
-            coin (str): Код монеты (например, 'btc').
-        """
-        self.save_income(coin)
-        self.save_payouts(coin)
+        for coin_id in account_data.get('coins', {}).keys():
+            self.save_income(coin_id)
+            self.save_payouts(coin_id)
