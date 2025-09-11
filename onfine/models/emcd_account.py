@@ -19,6 +19,8 @@ class EMCDAccountInfo(db.Model):
     username = db.Column(db.String(50), nullable=False)
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    env_var_name = db.Column(
+        db.String(255), nullable=False, default='EMCD_API_KEY')
 
     coins = db.relationship(
         'EMCDCoinInfo', backref='account_info', cascade='all, delete-orphan')
@@ -54,6 +56,8 @@ class EMCDCoinInfo(db.Model):
     total_paid = db.Column(db.Float, nullable=False)
     total_reward = db.Column(db.Float, nullable=False)
     min_payout = db.Column(db.Float, nullable=False)
+    env_var_name = db.Column(
+        db.String(255), nullable=False, default='EMCD_API_KEY')
 
     token = db.relationship('BlockchainTokens', backref='coin_infos')
 

@@ -25,6 +25,8 @@ class EMCDPayout(db.Model):
     tx_id = db.Column(db.String(100), nullable=True)
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    env_var_name = db.Column(
+        db.String(255), nullable=False, default='EMCD_API_KEY')
 
     token = db.relationship('BlockchainTokens', backref='payouts')
 
