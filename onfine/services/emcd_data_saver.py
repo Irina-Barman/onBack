@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from onfine.models.emcd_account import EMCDAccountInfo, EMCDCoinInfo
 from onfine.models.emcd_income import EMCDIncome
@@ -21,8 +21,14 @@ class EMCDDataSaver:
     Для общего пула pool_id=0, без user_id.
     """
 
-    def __init__(self) -> None:
-        self.emcd_service = EMCDService()
+    def __init__(self, emcd_token: Optional[str] = None) -> None:
+        """
+        Инициализирует EMCDService с опциональным токеном.
+
+        Args:
+            emcd_token (str, optional): Токен для EMCD API. Если не передан, используется базовый из EMCD_API_KEY.
+        """
+        self.emcd_service = EMCDService(emcd_token=emcd_token)
         self.pool_id = 0  # фиксированный для общего пула
 
     def _validate_income_data(self, data: Dict[str, Any]) -> None:
