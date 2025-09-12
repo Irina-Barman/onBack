@@ -1,9 +1,23 @@
 from typing import Any, Dict
-
-from flask_jwt_extended import jwt_required
+import os
+from functools import wraps
+from flask import request, abort
 from flask_restx import Namespace, Resource, fields
 
-from onfine.services.emcd import EMCDService
+from onfine.services.emcd_service import EMCDService
+
+# Получение API-ключа из переменной окружения
+API_KEY = os.getenv("EMCD_API_KEY")
+
+# Декоратор для проверки API-ключа
+def require_api_key(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        key = request.headers.get("X-API-KEY")
+        if not key or key != API_KEY:
+            abort(401, "Unauthorized: invalid or missing API key")
+        return func(*args, **kwargs)
+    return wrapper
 
 ns = Namespace("emcd", description="Информация из EMCD API")
 svc = EMCDService()
@@ -130,11 +144,10 @@ payouts_info = ns.model(
     },
 )
 
-
 # Endpoints
 @ns.route("/info")
 class Info(Resource):
-    @jwt_required()
+    @require_api_key
     @ns.marshal_with(account_info)
     def get(self) -> Dict[str, Any]:
         """Получает информацию об аккаунте.
@@ -144,7 +157,7 @@ class Info(Resource):
 
         Example request:
         curl -X GET "http://127.0.0.1:5500/api/emcd/info" \
-            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "X-API-KEY: <your_api_key_from_env>" \
             -H "Accept: application/json"
 
         """
@@ -153,7 +166,7 @@ class Info(Resource):
 
 @ns.route("/workers/<string:coin>")
 class Workers(Resource):
-    @jwt_required()
+    @require_api_key
     @ns.marshal_with(workers_info)
     def get(self, coin: str) -> Dict[str, Any]:
         """Получает информацию о работниках для указанной крипты.
@@ -166,7 +179,7 @@ class Workers(Resource):
 
         Example request:
         curl -X GET "http://127.0.0.1:5500/api/emcd/workers/<coin>" \
-            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "X-API-KEY: <your_api_key_from_env>" \
             -H "Accept: application/json"
 
         Замените <coin> на идентификатор крипты (например, "btc").
@@ -176,7 +189,7 @@ class Workers(Resource):
 
 @ns.route("/income/<string:coin>")
 class Income(Resource):
-    @jwt_required()
+    @require_api_key
     @ns.marshal_with(income_info)
     def get(self, coin: str) -> Dict[str, Any]:
         """Получает информацию о доходах для указанной крипты.
@@ -189,7 +202,7 @@ class Income(Resource):
 
         Example request:
         curl -X GET "http://127.0.0.1:5500/api/emcd/income/<coin>" \
-            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "X-API-KEY: <your_api_key_from_env>" \
             -H "Accept: application/json"
 
         Замените <coin> на идентификатор крипты (например, "btc").
@@ -199,7 +212,7 @@ class Income(Resource):
 
 @ns.route("/payouts/<string:coin>")
 class Payouts(Resource):
-    @jwt_required()
+    @require_api_key
     @ns.marshal_with(payouts_info)
     def get(self, coin: str) -> Dict[str, Any]:
         """Получает информацию о выплатах для указанной крипты.
@@ -212,7 +225,7 @@ class Payouts(Resource):
 
         Example request:
         curl -X GET "http://127.0.0.1:5500/api/emcd/payouts/<coin>" \
-            -H "Authorization: Bearer <your_jwt_token>" \
+            -H "X-API-KEY: <your_api_key_from_env>" \
             -H "Accept: application/json"
 
         Замените <coin> на идентификатор крипты (например, "btc").
