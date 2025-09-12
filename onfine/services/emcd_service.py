@@ -15,22 +15,25 @@ class EMCDService:
     Сервис для взаимодействия с EMCD API.
 
     Предоставляет методы для получения данных о аккаунте, воркерах, доходах и выплатах.
-    Использует API-ключ из переменной окружения EMCD_API_KEY для аутентификации.
+    Использует API-ключ (EMCD-токен), переданный в конструктор или базовый из переменной окружения EMCD_API_KEY.
     """
 
     BASE_V2 = "https://api.emcd.io/v2"
     BASE_V1 = "https://api.emcd.io/v1"
 
-    def __init__(self) -> None:
+    def __init__(self, emcd_token: str = None) -> None:
         """
-        Инициализирует сервис с API-ключом.
+        Инициализирует сервис с EMCD-токеном.
+
+        Args:
+            emcd_token (str, optional): Токен для EMCD API. Если не передан, используется базовый из EMCD_API_KEY.
 
         Raises:
-            RuntimeError: Если переменная окружения EMCD_API_KEY не установлена.
+            RuntimeError: Если ни emcd_token, ни переменная окружения EMCD_API_KEY не установлены.
         """
-        self.api_key = os.getenv("EMCD_API_KEY")
+        self.api_key = emcd_token or os.getenv("EMCD_API_KEY")
         if not self.api_key:
-            raise RuntimeError("EMCD_API_KEY is not set")
+            raise RuntimeError("EMCD token is not provided and EMCD_API_KEY is not set")
 
     def _get(self, url: str) -> Dict[str, Any]:
         """
@@ -43,8 +46,8 @@ class EMCDService:
             dict: JSON-ответ от API.
 
         Raises:
-            requests.RequestException: Если запрос не удался (например, ошибка сети или аутентификации).
-            ValueError: Если ответ пустой или не JSON.
+            requests.RequestException: Если запрос не удался (например, ошибка сети).
+            ValueError: Если ответ пустой, не JSON или токен невалидный (401).
         """
         try:
             r = requests.get(f"{url}/{self.api_key}", timeout=10)
@@ -53,6 +56,10 @@ class EMCDService:
             if not data:
                 raise ValueError("Empty response from EMCD API")
             return data
+        except requests.HTTPError as e:
+            if r.status_code == 401:
+                raise ValueError("Invalid EMCD token") from e
+            raise  # Передаем другие HTTP-ошибки выше
         except requests.RequestException:
             raise  # Передаем исключение выше
         except ValueError as e:
