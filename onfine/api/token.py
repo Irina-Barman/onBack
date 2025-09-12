@@ -18,7 +18,6 @@ from ..api.error_handlers import (
 logger = logging.getLogger(__name__)
 
 # Создаём пространство имён API для токенов пользователя
-# Создаём пространство имён API для токенов пользователя
 ns = Namespace("tokens", description="Управление токенами пользователя")
 register_error_handlers(ns)
 
@@ -32,7 +31,6 @@ err_model = ns.model(
     },
 )
 
-# Модель одного токена
 # Модель одного токена
 blockchain_token_out = ns.model(
     "BlockchainTokenOut",
@@ -97,7 +95,6 @@ class BlockchainTokensList(Resource):
 
         Returns:
             dict: {"tokens": [...список токенов...]} с полями id, symbol, contract_address, tracked.
-            dict: {"tokens": [...список токенов...]} с полями id, symbol, contract_address, tracked.
 
         Raises:
             ValueError: Если сеть не поддерживается (400).
@@ -111,13 +108,10 @@ class BlockchainTokensList(Resource):
         """
         if network not in VALID_NETWORKS:
             raise ValueError(f"Unsupported network '{network}'")
-            raise ValueError(f"Unsupported network '{network}'")
 
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
         if not user:
-            logger.error(f"User with ID {user_id} not found")
-            raise UserNotFoundError()
             logger.error(f"User with ID {user_id} not found")
             raise UserNotFoundError()
 
@@ -134,8 +128,6 @@ class BlockchainTokensList(Resource):
             }
             for token in all_tokens
         ]
-
-        return {"tokens": tokens}
 
         return {"tokens": tokens}
 
@@ -160,9 +152,7 @@ class TokensAdd(Resource):
             UserNotFoundError: Если пользователь не найден (404).
             ValueError: Для ошибок валидации или бизнес-логики (400).
             Exception: Для неожиданных ошибок (500).
-            UserNotFoundError: Если пользователь не найден (404).
-            ValueError: Для ошибок валидации или бизнес-логики (400).
-            Exception: Для неожиданных ошибок (500).
+
         """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
@@ -177,10 +167,9 @@ class TokensAdd(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(
+                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
-            logger.error(f"User with ID {user_id} not found")
-            raise UserNotFoundError()
 
         data = request.get_json()
         if not data or "blockchain_token_id" not in data:
@@ -189,25 +178,22 @@ class TokensAdd(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(
+                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
 
         try:
             tracked = svc.add_tracked_token(user, blockchain_token_id)
-            logger.info(f"User {user.id} added token {blockchain_token_id} to tracked")
+            logger.info(
+                f"User {user.id} added token {blockchain_token_id} to tracked")
             return {
                 "message": "Token added successfully",
                 "blockchain_token_id": tracked.blockchain_token_id,
             }, 201
-            logger.info(f"User {user.id} added token {blockchain_token_id} to tracked")
-            return {
-                "message": "Token added successfully",
-                "blockchain_token_id": tracked.blockchain_token_id,
-            }, 201
+
         except Exception as e:
-            logger.error(f"Unexpected error in add_tracked_token for user {user.id}: {e}")
-            raise InternalServerError(f"Failed to remove token: {str(e)}")
-            logger.error(f"Unexpected error in add_tracked_token for user {user.id}: {e}")
+            logger.error(
+                f"Unexpected error in add_tracked_token for user {user.id}: {e}")
             raise InternalServerError(f"Failed to remove token: {str(e)}")
 
 
@@ -226,20 +212,13 @@ class TokensRemove(Resource):
         Returns:
             dict, int: Подтверждение удаления и HTTP статус 200.
 
-        Returns:
-            dict, int: Подтверждение удаления и HTTP статус 200.
-
         Raises:
             UserNotFoundError: Если пользователь не найден (404).
             ValueError: Для ошибок валидации (400).
             TrackedTokenNotFoundError: Если токен не найден в отслеживаемых (404).
             requests.HTTPError: Для HTTP-ошибок от внешних запросов (404 или 500).
             Exception: Для неожиданных ошибок (500).
-            UserNotFoundError: Если пользователь не найден (404).
-            ValueError: Для ошибок валидации (400).
-            TrackedTokenNotFoundError: Если токен не найден в отслеживаемых (404).
-            requests.HTTPError: Для HTTP-ошибок от внешних запросов (404 или 500).
-            Exception: Для неожиданных ошибок (500).
+
         """
         user_id = get_jwt_identity()
         user = User.query.get(user_id)
@@ -254,10 +233,9 @@ class TokensRemove(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(
+                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
-            logger.error(f"User with ID {user_id} not found")
-            raise UserNotFoundError()
 
         data = request.get_json()
         if not data or "blockchain_token_id" not in data:
@@ -266,28 +244,24 @@ class TokensRemove(Resource):
 
         blockchain_token_id = data["blockchain_token_id"]
         if not isinstance(blockchain_token_id, int) or blockchain_token_id <= 0:
-            logger.error(f"Invalid 'blockchain_token_id': {blockchain_token_id}")
+            logger.error(
+                f"Invalid 'blockchain_token_id': {blockchain_token_id}")
             raise ValueError("blockchain_token_id must be a positive integer")
 
         try:
             removed = svc.remove_tracked_token(user, blockchain_token_id)
             if not removed:
-                logger.warning(f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
+                logger.warning(
+                    f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
                 raise TrackedTokenNotFoundError()
-            logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
+            logger.info(
+                f"User {user.id} removed token {blockchain_token_id} from tracked")
             return {
                 "message": "Token removed successfully",
                 "blockchain_token_id": blockchain_token_id,
             }, 200
-            logger.warning(f"Token {blockchain_token_id} not found in tracked list for user {user.id}")
-            raise TrackedTokenNotFoundError()
-            logger.info(f"User {user.id} removed token {blockchain_token_id} from tracked")
-            return {
-                "message": "Token removed successfully",
-                "blockchain_token_id": blockchain_token_id,
-            }, 200
+
         except Exception as e:
-            logger.error(f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
-            raise InternalServerError(f"Failed to remove token: {str(e)}")
-            logger.error(f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
+            logger.error(
+                f"Unexpected error in remove_tracked_token for user {user.id}: {e}")
             raise InternalServerError(f"Failed to remove token: {str(e)}")

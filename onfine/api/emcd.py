@@ -1,7 +1,8 @@
-from typing import Any, Dict
 import os
 from functools import wraps
-from flask import request, abort
+from typing import Any, Callable, Dict
+
+from flask import abort, request
 from flask_restx import Namespace, Resource, fields
 
 from onfine.services.emcd_service import EMCDService
@@ -9,15 +10,18 @@ from onfine.services.emcd_service import EMCDService
 # Получение API-ключа из переменной окружения
 API_KEY = os.getenv("EMCD_API_KEY")
 
+
 # Декоратор для проверки API-ключа
-def require_api_key(func):
+def require_api_key(func: Callable[..., Any]):
     @wraps(func)
-    def wrapper(*args, **kwargs):
+    def wrapper(*args, **kwargs) -> Any:
         key = request.headers.get("X-API-KEY")
         if not key or key != API_KEY:
             abort(401, "Unauthorized: invalid or missing API key")
         return func(*args, **kwargs)
+
     return wrapper
+
 
 ns = Namespace("emcd", description="Информация из EMCD API")
 svc = EMCDService()
@@ -143,6 +147,7 @@ payouts_info = ns.model(
         "payouts": fields.List(fields.Nested(payout_entry), required=True),
     },
 )
+
 
 # Endpoints
 @ns.route("/info")
