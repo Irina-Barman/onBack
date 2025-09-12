@@ -7,24 +7,48 @@ from flask_restx import Namespace, Resource, fields
 
 from onfine.services.emcd_service import EMCDService
 
-# Получение API-ключа из переменной окружения
-API_KEY = os.getenv("EMCD_API_KEY")
+# Новые переменные окружения для разделения уровней безопасности
+# Новый ключ для нашего API (проверка X-API-KEY)
+OUR_API_KEY = os.getenv("OUR_API_KEY")
+EMCD_API_KEY = os.getenv("EMCD_API_KEY")  # Базовый токен EMCD (по умолчанию)
+# Обработка ALLOWED_EMCD_TOKENS: убираем пустые значения и добавляем базовый токен, если он не пустой и не в списке
+ALLOWED_EMCD_TOKENS = [token.strip() for token in os.getenv(
+    "ALLOWED_EMCD_TOKENS", "").split(",") if token.strip()]
+if EMCD_API_KEY and EMCD_API_KEY not in ALLOWED_EMCD_TOKENS:
+    ALLOWED_EMCD_TOKENS.append(EMCD_API_KEY)
+# Мастер-код для полного доступа (слово или фраза)
+MASTER_CODE = os.getenv("MASTER_CODE")
 
 
-# Декоратор для проверки API-ключа
 def require_api_key(func: Callable[..., Any]):
     @wraps(func)
     def wrapper(*args, **kwargs) -> Any:
         key = request.headers.get("X-API-KEY")
-        if not key or key != API_KEY:
+        if not key or key != OUR_API_KEY:
             abort(401, "Unauthorized: invalid or missing API key")
         return func(*args, **kwargs)
 
     return wrapper
 
+# Функция для проверки мастер-кода
+
+
+def is_master_code_provided() -> bool:
+    code = request.args.get('master_code')
+    return code and code == MASTER_CODE
+
+# Функция для проверки EMCD-токена (только если мастер-код НЕ предоставлен)
+
+
+def is_valid_emcd_token(token: str) -> bool:
+    if not token:
+        return False
+    return token in ALLOWED_EMCD_TOKENS
+
 
 ns = Namespace("emcd", description="Информация из EMCD API")
-svc = EMCDService()
+
+# Удаляем глобальный svc = EMCDService() — теперь создаём локально в каждом endpoint с нужным токеном
 
 # 1) Swagger-модель одного coin_info
 coin_info = ns.model(
@@ -157,15 +181,25 @@ class Info(Resource):
     def get(self) -> Dict[str, Any]:
         """Получает информацию об аккаунте.
 
-        Return:
+        Returns:
             dict: Информация об аккаунте пользователя.
 
         Example request:
-        curl -X GET "http://127.0.0.1:5500/api/emcd/info" \
-            -H "X-API-KEY: <your_api_key_from_env>" \
+        curl -X GET "http://127.0.0.1:5500/api/emcd/info?emcd_token=<optional_emcd_token>&master_code=<optional_master_code>" \
+            -H "X-API-KEY: <your_our_api_key_from_env>" \
             -H "Accept: application/json"
 
         """
+        # Получение EMCD-токена (опциональный параметр emcd_token в query)
+        emcd_token = request.args.get('emcd_token') or EMCD_API_KEY
+
+        # Проверка мастер-кода: если он правильный, пропускаем проверку токена
+        if not is_master_code_provided():
+            if not is_valid_emcd_token(emcd_token):
+                abort(403, "Invalid or unauthorized EMCD token")
+
+        # Создание сервиса с выбранным токеном
+        svc = EMCDService(emcd_token)
         return svc.get_account_info()
 
 
@@ -176,19 +210,29 @@ class Workers(Resource):
     def get(self, coin: str) -> Dict[str, Any]:
         """Получает информацию о работниках для указанной крипты.
 
-        Аргументы:
+        Args:
             coin (str): Идентификатор крипты.
 
-        Return:
+        Returns:
             dict: Информация о работниках для указанной крипты.
 
         Example request:
-        curl -X GET "http://127.0.0.1:5500/api/emcd/workers/<coin>" \
-            -H "X-API-KEY: <your_api_key_from_env>" \
+        curl -X GET "http://127.0.0.1:5500/api/emcd/workers/<coin>?emcd_token=<optional_emcd_token>&master_code=<optional_master_code>" \
+            -H "X-API-KEY: <your_our_api_key_from_env>" \
             -H "Accept: application/json"
 
         Замените <coin> на идентификатор крипты (например, "btc").
         """
+        # Получение EMCD-токена (опциональный параметр emcd_token в query)
+        emcd_token = request.args.get('emcd_token') or EMCD_API_KEY
+
+        # Проверка мастер-кода: если он правильный, пропускаем проверку токена
+        if not is_master_code_provided():
+            if not is_valid_emcd_token(emcd_token):
+                abort(403, "Invalid or unauthorized EMCD token")
+
+        # Создание сервиса с выбранным токеном
+        svc = EMCDService(emcd_token)
         return svc.get_workers(coin)
 
 
@@ -199,19 +243,29 @@ class Income(Resource):
     def get(self, coin: str) -> Dict[str, Any]:
         """Получает информацию о доходах для указанной крипты.
 
-        Аргументы:
+        Args:
             coin (str): Идентификатор крипты.
 
-        Return:
+        Returns:
             dict: Информация о доходах для указанной крипты.
 
         Example request:
-        curl -X GET "http://127.0.0.1:5500/api/emcd/income/<coin>" \
-            -H "X-API-KEY: <your_api_key_from_env>" \
+        curl -X GET "http://127.0.0.1:5500/api/emcd/income/<coin>?emcd_token=<optional_emcd_token>&master_code=<optional_master_code>" \
+            -H "X-API-KEY: <your_our_api_key_from_env>" \
             -H "Accept: application/json"
 
         Замените <coin> на идентификатор крипты (например, "btc").
         """
+        # Получение EMCD-токена (опциональный параметр emcd_token в query)
+        emcd_token = request.args.get('emcd_token') or EMCD_API_KEY
+
+        # Проверка мастер-кода: если он правильный, пропускаем проверку токена
+        if not is_master_code_provided():
+            if not is_valid_emcd_token(emcd_token):
+                abort(403, "Invalid or unauthorized EMCD token")
+
+        # Создание сервиса с выбранным токеном
+        svc = EMCDService(emcd_token)
         return svc.get_income(coin)
 
 
@@ -222,17 +276,27 @@ class Payouts(Resource):
     def get(self, coin: str) -> Dict[str, Any]:
         """Получает информацию о выплатах для указанной крипты.
 
-        Аргументы:
+        Args:
             coin (str): Идентификатор крипты.
 
-        Return:
+        Returns:
             dict: Информация о выплатах для указанной крипты.
 
         Example request:
-        curl -X GET "http://127.0.0.1:5500/api/emcd/payouts/<coin>" \
-            -H "X-API-KEY: <your_api_key_from_env>" \
+        curl -X GET "http://127.0.0.1:5500/api/emcd/payouts/<coin>?emcd_token=<optional_emcd_token>&master_code=<optional_master_code>" \
+            -H "X-API-KEY: <your_our_api_key_from_env>" \
             -H "Accept: application/json"
 
         Замените <coin> на идентификатор крипты (например, "btc").
         """
+        # Получение EMCD-токена (опциональный параметр emcd_token в query)
+        emcd_token = request.args.get('emcd_token') or EMCD_API_KEY
+
+        # Проверка мастер-кода: если он правильный, пропускаем проверку токена
+        if not is_master_code_provided():
+            if not is_valid_emcd_token(emcd_token):
+                abort(403, "Invalid or unauthorized EMCD token")
+
+        # Создание сервиса с выбранным токеном
+        svc = EMCDService(emcd_token)
         return svc.get_payouts(coin)
