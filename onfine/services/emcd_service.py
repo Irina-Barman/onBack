@@ -10,102 +10,102 @@ BASE_V1 = "https://api.emcd.io/v1"
 logger = logging.getLogger(__name__)
 
 
-class EMCDService:
+class DataService:
     """
-    Сервис для взаимодействия с EMCD API.
+    Сервис для взаимодействия с внешним провайдером данных.
 
-    Предоставляет методы для получения данных о аккаунте, воркерах, доходах и выплатах.
-    Использует API-ключ (EMCD-токен), переданный в конструктор или базовый из переменной окружения EMCD_API_KEY.
+    Предоставляет методы для получения данных об аккаунте, воркерах, доходах и выплатах.
+    Использует API-ключ (токен доступа), переданный в конструкторе или по умолчанию из переменной окружения BASE_API_TOKEN.
     """
 
-    BASE_V2 = "https://api.emcd.io/v2"
-    BASE_V1 = "https://api.emcd.io/v1"
-
-    def __init__(self, emcd_token: str = None) -> None:
+    def __init__(self, access_token: str = None) -> None:
         """
-        Инициализирует сервис с EMCD-токеном.
+        Инициализирует сервис с токеном доступа.
 
-        Args:
-            emcd_token (str, optional): Токен для EMCD API. Если не передан, используется базовый из EMCD_API_KEY.
+        Аргументы:
+            access_token (str, optional): Токен для внешнего API. Если не передан, используется по умолчанию из BASE_API_TOKEN.
 
-        Raises:
-            RuntimeError: Если ни emcd_token, ни переменная окружения EMCD_API_KEY не установлены.
+        Вызывает исключение:
+            RuntimeError: Если ни access_token, ни переменная окружения BASE_API_TOKEN не установлены.
         """
-        self.api_key = emcd_token or os.getenv("EMCD_API_KEY")
+        self.api_key = access_token or os.getenv("BASE_API_TOKEN")
         if not self.api_key:
-            raise RuntimeError("EMCD token is not provided and EMCD_API_KEY is not set")
+            raise RuntimeError("Token not provided and BASE_API_TOKEN not set")
 
     def _get(self, url: str) -> Dict[str, Any]:
         """
-        Выполняет GET-запрос к EMCD API с добавлением API-ключа в URL.
+        Выполняет GET-запрос к внешнему API, добавляя API-ключ к URL.
 
-        Args:
+        Аргументы:
             url (str): Базовый URL для запроса (без ключа).
 
-        Returns:
+        Возвращает:
             dict: JSON-ответ от API.
 
-        Raises:
+        Вызывает исключение:
             requests.RequestException: Если запрос не удался (например, ошибка сети).
-            ValueError: Если ответ пустой, не JSON или токен невалидный (401).
+            ValueError: Если ответ пустой, не JSON или токен недействителен (401).
         """
         try:
-            r = requests.get(f"{url}/{self.api_key}", timeout=10)
+            full_url = f"{url}/{self.api_key}"
+            r = requests.get(full_url, timeout=10)
             r.raise_for_status()
             data = r.json()
             if not data:
-                raise ValueError("Empty response from EMCD API")
+                raise ValueError("Empty response from external data service")
             return data
-        except requests.HTTPError as e:
+        except requests.HTTPError:
             if r.status_code == 401:
-                raise ValueError("Invalid EMCD token") from e
-            raise  # Передаем другие HTTP-ошибки выше
-        except requests.RequestException:
-            raise  # Передаем исключение выше
+                raise ValueError("Invalid access token")
+            raise
+        except requests.RequestException as e:
+            logger.error(f"Request to external data service failed: {e}")
+            raise
         except ValueError as e:
+            logger.error(f"Invalid JSON response from external data service: {e}")
             raise ValueError(f"Invalid JSON response: {e}")
 
     def get_account_info(self) -> Dict[str, Any]:
         """
         Получает информацию об аккаунте.
 
-        Returns:
-            dict: Данные об аккаунте в формате JSON.
+        Возвращает:
+            dict: Данные аккаунта в формате JSON.
         """
         return self._get(f"{BASE_V2}/info")
 
     def get_workers(self, coin: str) -> Dict[str, Any]:
         """
-        Получает информацию о воркерах для указанной монеты.
+        Получает информацию о воркерах для указанной coin.
 
-        Args:
-            coin (str): Код монеты (например, 'btc').
+        Аргументы:
+            coin (str): Код coin (например, 'btc').
 
-        Returns:
+        Возвращает:
             dict: Данные о воркерах в формате JSON.
         """
         return self._get(f"{BASE_V1}/{coin}/workers")
 
     def get_income(self, coin: str) -> Dict[str, Any]:
         """
-        Получает данные о доходах для указанной монеты.
+        Получает данные о доходах для указанной coin.
 
-        Args:
-            coin (str): Код монеты (например, 'btc').
+        Аргументы:
+            coin (str): Код coin (например, 'btc').
 
-        Returns:
+        Возвращает:
             dict: Данные о доходах в формате JSON.
         """
         return self._get(f"{BASE_V1}/{coin}/income")
 
     def get_payouts(self, coin: str) -> Dict[str, Any]:
         """
-        Получает данные о выплатах для указанной монеты.
+        Получает данные о выплатах для указанной coin.
 
-        Args:
-            coin (str): Код монеты (например, 'btc').
+        Аргументы:
+            coin (str): Код coin (например, 'btc').
 
-        Returns:
+        Возвращает:
             dict: Данные о выплатах в формате JSON.
         """
         return self._get(f"{BASE_V1}/{coin}/payouts")

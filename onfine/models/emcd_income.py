@@ -5,7 +5,7 @@ from sqlalchemy import Index
 from ..extensions import db
 
 
-class EMCDIncome(db.Model):
+class DataIncome(db.Model):
     """
     Модель для хранения информации о доходах EMCD.
 
@@ -25,7 +25,7 @@ class EMCDIncome(db.Model):
     total_hashrate = db.Column(db.Integer, nullable=False)
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    env_var_name = db.Column(db.String(255), nullable=False, default="EMCD_API_KEY")
+    env_var_name = db.Column(db.String(255), nullable=False, default="BASE_API_TOKEN")
 
     token = db.relationship("BlockchainTokens", backref="incomes")
 
@@ -36,4 +36,4 @@ class EMCDIncome(db.Model):
     )
 
     def __repr__(self) -> str:
-        return f"<EMCDIncome user_id={self.user_id} coin={self.coin} income={self.income}>"
+        return f"<DataIncome user_id={self.user_id} coin={self.coin} income={self.income}>"

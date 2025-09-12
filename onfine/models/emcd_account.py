@@ -6,7 +6,7 @@ from sqlalchemy import Index
 from ..extensions import db
 
 
-class EMCDAccountInfo(db.Model):
+class DataAccountInfo(db.Model):
     """
     Модель для хранения общей информации о аккаунте EMCD (без привязки к пользователям, для общего пула).
     """
@@ -19,9 +19,9 @@ class EMCDAccountInfo(db.Model):
     username = db.Column(db.String(50), nullable=False)
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    env_var_name = db.Column(db.String(255), nullable=False, default="EMCD_API_KEY")
+    env_var_name = db.Column(db.String(255), nullable=False, default="BASE_API_TOKEN")
 
-    coins = db.relationship("EMCDCoinInfo", backref="account_info", cascade="all, delete-orphan")
+    coins = db.relationship("DataCoinInfo", backref="account_info", cascade="all, delete-orphan")
 
     __table_args__ = (
         db.UniqueConstraint("pool_id", "date", name="uq_emcd_account_pool_date"),
@@ -29,10 +29,10 @@ class EMCDAccountInfo(db.Model):
     )
 
     def __repr__(self) -> str:
-        return f"<EMCDAccountInfo pool_id={self.pool_id} username={self.username} date={self.date}>"
+        return f"<DataAccountInfo pool_id={self.pool_id} username={self.username} date={self.date}>"
 
 
-class EMCDCoinInfo(db.Model):
+class DataCoinInfo(db.Model):
     """
     Модель для хранения детальной информации о криптовалюте в аккаунте EMCD.
 
@@ -51,7 +51,7 @@ class EMCDCoinInfo(db.Model):
     total_paid = db.Column(db.Float, nullable=False)
     total_reward = db.Column(db.Float, nullable=False)
     min_payout = db.Column(db.Float, nullable=False)
-    env_var_name = db.Column(db.String(255), nullable=False, default="EMCD_API_KEY")
+    env_var_name = db.Column(db.String(255), nullable=False, default="BASE_API_TOKEN")
 
     token = db.relationship("BlockchainTokens", backref="coin_infos")
 
@@ -62,4 +62,4 @@ class EMCDCoinInfo(db.Model):
     )
 
     def __repr__(self) -> str:
-        return f"<EMCDCoinInfo coin_id={self.coin_id} balance={self.balance} date={self.date}>"
+        return f"<DataCoinInfo coin_id={self.coin_id} balance={self.balance} date={self.date}>"

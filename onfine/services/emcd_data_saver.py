@@ -2,10 +2,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from onfine.models.emcd_account import EMCDAccountInfo, EMCDCoinInfo
-from onfine.models.emcd_income import EMCDIncome
-from onfine.models.emcd_payouts import EMCDPayout
-from onfine.services.emcd_service import EMCDService
+from onfine.models.emcd_account import DataAccountInfo, DataCoinInfo
+from onfine.models.emcd_income import DataIncome
+from onfine.models.emcd_payouts import DataPayout
+from onfine.services.emcd_service import DataService
 
 from ..extensions import db
 
@@ -15,20 +15,20 @@ BASE_V1 = "https://api.emcd.io/v1"
 logger = logging.getLogger(__name__)
 
 
-class EMCDDataSaver:
+class DataSaver:
     """
     Класс для сохранения данных из EMCD API в базу данных.
     Для общего пула pool_id=0, без user_id.
     """
 
-    def __init__(self, emcd_token: Optional[str] = None) -> None:
+    def __init__(self, access_token: Optional[str] = None) -> None:
         """
-        Инициализирует EMCDService с опциональным токеном.
+        Инициализирует DataService с опциональным токеном.
 
         Args:
-            emcd_token (str, optional): Токен для EMCD API. Если не передан, используется базовый из EMCD_API_KEY.
+            access_token (str, optional): Токен для EMCD API. Если не передан, используется базовый из BASE_API_TOKEN.
         """
-        self.emcd_service = EMCDService(emcd_token=emcd_token)
+        self.emcd_service = DataService(access_token=access_token)
         self.pool_id = 0  # фиксированный для общего пула
 
     def _validate_income_data(self, data: Dict[str, Any]) -> None:
@@ -61,7 +61,7 @@ class EMCDDataSaver:
 
     def save_account_info(self, account_data: dict) -> None:
         """
-        Сохраняет EMCDAccountInfo и EMCDCoinInfo из данных /info.
+        Сохраняет в DataAccountInfo и DataCoinInfo из данных /info.
         """
         username = account_data.get("username", "unknown")
         date = datetime.now(tz=timezone.utc).date()
@@ -69,15 +69,15 @@ class EMCDDataSaver:
         try:
             with db.session.begin():
                 # Поиск или создание записи аккаунта
-                account_info = EMCDAccountInfo.query.filter_by(pool_id=self.pool_id, date=date).first()
+                account_info = DataAccountInfo.query.filter_by(pool_id=self.pool_id, date=date).first()
                 if not account_info:
-                    account_info = EMCDAccountInfo(pool_id=self.pool_id, username=username, date=date)
+                    account_info = DataAccountInfo(pool_id=self.pool_id, username=username, date=date)
                     db.session.add(account_info)
                     db.session.flush()  # чтобы получить account_info.id
 
-                # Сохраняем данные по каждой монете
+                # Сохраняем данные по каждой coinе
                 for coin_id, coin_data in account_data.get("coins", {}).items():
-                    coin_info = EMCDCoinInfo.query.filter_by(
+                    coin_info = DataCoinInfo.query.filter_by(
                         account_info_id=account_info.id,
                         coin_id=coin_id,
                         date=date,
@@ -92,7 +92,7 @@ class EMCDDataSaver:
                         coin_info.min_payout = float(coin_data.get("min_payout", 0))
                     else:
                         # Создаем новую запись
-                        coin_info = EMCDCoinInfo(
+                        coin_info = DataCoinInfo(
                             account_info_id=account_info.id,
                             coin_id=coin_id,
                             date=date,
@@ -110,7 +110,7 @@ class EMCDDataSaver:
 
     def save_income(self, coin: str) -> None:
         """
-        Сохраняет доходы для монеты в EMCDIncome без user_id, с pool_id=0.
+        Сохраняет доходы для coin в DataIncome без user_id, с pool_id=0.
         """
         data = self.emcd_service.get_income(coin)
         self._validate_income_data(data)  # Валидация
@@ -120,8 +120,8 @@ class EMCDDataSaver:
                 for item in data["income"]:
                     date = datetime.fromtimestamp(item["timestamp"], tz=timezone.utc).date()
 
-                    # Проверяем существование записи по дате, монете и pool_id=0
-                    existing = EMCDIncome.query.filter_by(
+                    # Проверяем существование записи по дате, coinе и pool_id=0
+                    existing = DataIncome.query.filter_by(
                         user_id=None,  # Если user_id не nullable, добавьте дефолт или измените модель
                         coin=coin,
                         date=date,
@@ -129,7 +129,7 @@ class EMCDDataSaver:
                     if existing:
                         continue
 
-                    income = EMCDIncome(
+                    income = DataIncome(
                         user_id=None,
                         coin=coin,
                         token_id=None,
@@ -148,7 +148,7 @@ class EMCDDataSaver:
 
     def save_payouts(self, coin: str) -> None:
         """
-        Сохраняет выплаты для монеты в EMCDPayout без user_id, с pool_id=0.
+        Сохраняет выплаты для coin в DataPayout без user_id, с pool_id=0.
         """
         data = self.emcd_service.get_payouts(coin)
         self._validate_payouts_data(data)  # Валидация
@@ -158,11 +158,11 @@ class EMCDDataSaver:
                 for item in data["payouts"]:
                     date = datetime.fromtimestamp(item["timestamp"], tz=timezone.utc).date()
 
-                    existing = EMCDPayout.query.filter_by(user_id=None, coin=coin, date=date).first()
+                    existing = DataPayout.query.filter_by(user_id=None, coin=coin, date=date).first()
                     if existing:
                         continue
 
-                    payout = EMCDPayout(
+                    payout = DataPayout(
                         user_id=None,
                         coin=coin,
                         token_id=None,
@@ -182,7 +182,7 @@ class EMCDDataSaver:
 
     def save_all(self) -> None:
         """
-        Сохраняет всю информацию: account info, доходы и выплаты по всем монетам.
+        Сохраняет всю информацию: account info, доходы и выплаты по всем coin.
         """
         try:
             account_data = self.emcd_service.get_account_info()

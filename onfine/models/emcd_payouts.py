@@ -5,7 +5,7 @@ from sqlalchemy import Index
 from ..extensions import db
 
 
-class EMCDPayout(db.Model):
+class DataPayout(db.Model):
     """
     Модель для хранения информации о выплатах EMCD.
     """
@@ -24,7 +24,7 @@ class EMCDPayout(db.Model):
     tx_id = db.Column(db.String(100), nullable=True)
     date = db.Column(db.Date, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    env_var_name = db.Column(db.String(255), nullable=False, default="EMCD_API_KEY")
+    env_var_name = db.Column(db.String(255), nullable=False, default="BASE_API_TOKEN")
 
     token = db.relationship("BlockchainTokens", backref="payouts")
 
@@ -35,4 +35,4 @@ class EMCDPayout(db.Model):
     )
 
     def __repr__(self) -> str:
-        return f"<EMCDPayout user_id={self.user_id} coin={self.coin} payout={self.payout}>"
+        return f"<DataPayout user_id={self.user_id} coin={self.coin} payout={self.payout}>"
